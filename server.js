@@ -1,6 +1,6 @@
 var users = {
-	'users': [
-    { 
+  'users': [
+    {
       'id': 'cristianstrat',
       'name': 'Cristian Strat', 
       'password': 'cs1234', 
@@ -32,33 +32,33 @@ var users = {
 };
 
 var posts = {
-	'posts': [
-	  {
+  'posts': [
+    {
 		  'id': '1',
       'author': 'fastcompany',
       'body': 'Leica celebrates 100 years with a georgeously minimalist shooter that pays homage to its first <a href="http://wrd.cm/1ieFplL">http://wrd.cm/1ieFplL</a> <a href="http://pic.twitter.com/SNvy9PGZwc">pic.twitter.com/SNvy9PGZwc</a>',
       'createdDate': new Date(2014, 3, 24, 13, 39, 0).toISOString()    
     },
     {
-			'id': '2',
+      'id': '2',
       'author': 'fastcompany',
       'body': 'This app is like a remote control for your credit cards: <a href="http://f-st.co/OXzg2Ew">http://f-st.co/OXzg2Ew</a> <a href="http://pic.twitter.com/eAL1sdVhrh">pic.twitter.com/eAL1sdVhrh</a>',
       'createdDate': new Date(2014, 3, 24, 13, 40, 0).toISOString()
 	  },
     {
-	  	'id': '3',
+      'id': '3',
       'author': 'clarkewolfe',
       'body': 'Listen, I don&rsquo;t want to brag about my awesome #gaming skills but someone made it into an @IGN article today...',
       'createdDate': new Date(2014, 3, 24, 13, 42, 0).toISOString()
     },
     {
-	 		'id': '4',
+      'id': '4',
       'author': 'johnmaeda',
       'body': 'Great teams constantly learn and re-learn how to move from the ego of *I* to the ego of *WE*.',
       'createdDate': new Date(2014, 3, 24, 13, 45, 0).toISOString()
 	  },
     {
-	 		'id': '5',
+	 	  'id': '5',
       'author': 'cristianstrat',
       'body': 'Ponies enhance cognition. To be safe around horses you must stay focused, alert, aware, and never forget that they can kick your ass.',
       'createdDate': new Date(2014, 3, 24, 13, 50, 0).toISOString()
@@ -75,7 +75,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 
 app.use(bodyParser.json());
 
-app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
+//app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
 
 app.use(function(err, req, res, next) {
   res.status(500);
@@ -88,7 +88,7 @@ app.post('/api/users', function(req, res) {
 	logger.info('The server received a POST request to add a user with the following user ID: ' + user.id);
 	users.users.push(user);
 	logger.info('The server successfully added the user with the user ID ' + user.id + '.');
-	res.status(200).end();
+	res.status(200).send({'user': user});
 });
 
 app.get('/api/users', function(req, res) {
@@ -140,7 +140,7 @@ app.post('/api/posts', function(req, res) {
 	logger.info('The server received a POST request to add the post with following post ID: ' + post.id);
   posts.posts.push(post);
   logger.info('The server successfully added the post with the post ID ' + post.id + '.');
-  res.status(200).end();
+  res.status(200).send({'post': post});
 });
 
 app.delete('/api/posts/:id', function(req, res) {
@@ -150,7 +150,7 @@ app.delete('/api/posts/:id', function(req, res) {
     	if (post.id == req.params.id) {
     		posts.posts.splice(index, 1);
     		logger.info('The server successfully deleted the post with the post ID ' + post.id + '.');
-    		res.send({});
+    		res.status(200).send({});
     	}
     });
   }
