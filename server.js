@@ -66,16 +66,32 @@ var posts = {
   ]
 };
 
-var logger = require('nlogger').logger(module),
-    express = require('express'),
+var express = require('express'),
+    logger = require('nlogger').logger(module),
+    passport = require('passport'),
+    LocalStrategy = require('passport-local').Strategy,
+    cookieParser = require('cookie-parser'),
     bodyParser = require('body-parser'),
+    session = require('express-session'),
+    uuid = require('node-uuid'),
     app = express();
 
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(cookieParser());
 
 app.use(bodyParser.json());
 
-//app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
+app.use(session({
+  resave: true,
+  saveUninitialized: true,
+  genid: function(req) {
+    return uuid.v1();
+  },
+  secret: 'telegram app'
+}));
+
+app.use(passport.initialize());
+
+app.use(passport.session());
 
 app.use(function(err, req, res, next) {
   res.status(500);
@@ -83,24 +99,83 @@ app.use(function(err, req, res, next) {
   logger.error('Error: ' + err);
 });
 
+passport.use(new LocalStrategy({
+    usernameField: 'id'
+  },
+  function(username, password, done) {
+    var foundUser;
+    users.users.forEach(function(user) {
+      if (user.id == username && user.password == password) {
+        foundUser = user; 
+      }
+    });
+    if (!foundUser) {
+      return done(null, false, { message: 'Incorrect username or password' });
+    } else {
+      return done(null, foundUser);
+    }
+  }
+));
+
+passport.serializeUser(function(user, done) {
+  done(null, user);
+});
+
+passport.deserializeUser(function(user, done) {
+  done(null, user);
+});
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated() && req.user.id == req.body.post.author) {
+    return next();
+  } else {
+    return res.status(403).end();
+  }
+}
+
 app.post('/api/users', function(req, res) {
 	var user = req.body.user;
 	logger.info('The server received a POST request to add a user with the following user ID: ' + user.id);
 	users.users.push(user);
 	logger.info('The server successfully added the user with the user ID ' + user.id + '.');
+  req.login(user, function(err) {
+    if (err) {
+      return next(err);
+    }
+    console.log(req.user);
+  });
 	res.status(200).send({'user': user});
 });
 
-app.get('/api/users', function(req, res) {
-	if (req.query.id && req.query.password) {
+app.get('/api/users', function(req, res, next) {
+	if (req.query.isAuthenticated) {
+    logger.info('The server received a GET request for an authentcated user');
+    if (req.isAuthenticated && req.user) {
+      res.send({'users': [req.user]});
+      logger.info('The authenticated user was found and returned to the client');
+    } else {
+      res.send({'users': []});
+      logger.info('No authenticated user was found, and an empty object was returned to the client.');
+    }
+  }
+  else if (req.query.id && req.query.password) {
 		logger.info('The server received a GET request for a user with the user ID ' + req.query.id + ' and a password.');
-		users.users.forEach(function(user) {
-	    if (user.id == req.query.id && user.password == req.query.password) {
-	      res.send({'users': [user]});
-	      logger.info('The server successfully retrieved and sent the user with the user ID ' + user.id + ' and the password.');
-	    }
-		});
-	}
+    passport.authenticate('local', function(err, user, info) {
+      if (err) { 
+        return next(err); 
+      }
+      if (!user) { 
+        return res.redirect('/login'); 
+      }
+      req.login(user, function(err) {
+        if (err) { return next(err); }
+        logger.info('Login with username ' + user.id + ' and the password was successful.');
+        return res.send({'users': [user]}); 
+      });
+             
+    })(req, res, next);
+    
+  }
 	else if (req.query.email) {
 		logger.info('The server received a GET request for a user with an email.');
 		users.users.forEach(function(user) {
@@ -135,9 +210,18 @@ app.get('/api/posts', function(req, res) {
   logger.info('The server successfully retrieved and sent all posts.');
 });
 
-app.post('/api/posts', function(req, res) {
+app.post('/api/posts', ensureAuthenticated, function(req, res) {
+  logger.info('The server received a POST request from authenticated author ' + req.body.post.author + ' to add a post.');
+  var postId = (+(posts.posts.sort(function(a, b) {
+    if (a.id < b.id) {
+      return -1;
+    } else {
+      return 1;
+    }
+  })[posts.posts.length - 1].id) + 1).toString();
   var post = req.body.post;
-	logger.info('The server received a POST request to add the post with following post ID: ' + post.id);
+  post.id = postId;
+  console.log('post id: ' + post.id);
   posts.posts.push(post);
   logger.info('The server successfully added the post with the post ID ' + post.id + '.');
   res.status(200).send({'post': post});
@@ -154,6 +238,13 @@ app.delete('/api/posts/:id', function(req, res) {
     	}
     });
   }
+});
+
+app.get('/api/logout', function(req, res) {
+  if (req.query.logout) {
+    req.logout();
+    res.status(200).send('Success');
+  }  
 });
 
 var server = app.listen(3000, function() {
