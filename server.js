@@ -134,21 +134,21 @@ function ensureAuthenticated(req, res, next) {
 }
 
 app.post('/api/users', function(req, res) {
-	var user = req.body.user;
-	logger.info('The server received a POST request to add a user with the following user ID: ' + user.id);
-	users.users.push(user);
-	logger.info('The server successfully added the user with the user ID ' + user.id + '.');
+  var user = req.body.user;
+  logger.info('The server received a POST request to add a user with the following user ID: ' + user.id);
+  users.users.push(user);
+  logger.info('The server successfully added the user with the user ID ' + user.id + '.');
   req.login(user, function(err) {
     if (err) {
       return next(err);
     }
     console.log(req.user);
   });
-	res.status(200).send({'user': user});
+  res.status(200).send({'user': user});
 });
 
 app.get('/api/users', function(req, res, next) {
-	if (req.query.isAuthenticated) {
+  if (req.query.isAuthenticated) {
     logger.info('The server received a GET request for an authentcated user');
     if (req.isAuthenticated && req.user) {
       res.send({'users': [req.user]});
@@ -159,7 +159,7 @@ app.get('/api/users', function(req, res, next) {
     }
   }
   else if (req.query.id && req.query.password) {
-		logger.info('The server received a GET request for a user with the user ID ' + req.query.id + ' and a password.');
+    logger.info('The server received a GET request for a user with the user ID ' + req.query.id + ' and a password.');
     passport.authenticate('local', function(err, user, info) {
       if (err) { 
         return next(err); 
@@ -172,40 +172,38 @@ app.get('/api/users', function(req, res, next) {
         logger.info('Login with username ' + user.id + ' and the password was successful.');
         return res.send({'users': [user]}); 
       });
-             
     })(req, res, next);
-    
   }
-	else if (req.query.email) {
-		logger.info('The server received a GET request for a user with an email.');
-		users.users.forEach(function(user) {
-			if (user.email == req.query.email) {
-				res.send({'users': [user]});
-	      logger.info('The server successfully retrieved and sent the user with the email.');
-			}
-		});
-	}
-	else {
-		logger.info('The server received a GET request for all users.');
+  else if (req.query.email) {
+    logger.info('The server received a GET request for a user with an email.');
+    users.users.forEach(function(user) {
+      if (user.email == req.query.email) {
+        res.send({'users': [user]});
+        logger.info('The server successfully retrieved and sent the user with the email.');
+      }
+    });
+  }
+  else {
+    logger.info('The server received a GET request for all users.');
     res.send(users);
     logger.info('The server successfully retrieved and sent all users.');
-	}  
+  }  
 });
 
 app.get('/api/users/:id', function(req, res) {
   if (req.params.id) {
-		logger.info('The server received a GET request for a user with the following user ID: ' + req.params.id);
-		users.users.forEach(function(user) {
+    logger.info('The server received a GET request for a user with the following user ID: ' + req.params.id);
+    users.users.forEach(function(user) {
       if (user.id == req.params.id) {
         res.send({'user': user});
-	      logger.info('The server successfully retrieved and sent the user with the user ID ' + user.id + '.');
+        logger.info('The server successfully retrieved and sent the user with the user ID ' + user.id + '.');
       }
-		}); 
-	}
+    }); 
+  }
 });
 
 app.get('/api/posts', function(req, res) {
-	logger.info('The server received a GET request for all posts.');
+  logger.info('The server received a GET request for all posts.');
   res.send(posts);
   logger.info('The server successfully retrieved and sent all posts.');
 });
@@ -229,13 +227,13 @@ app.post('/api/posts', ensureAuthenticated, function(req, res) {
 
 app.delete('/api/posts/:id', function(req, res) {
   if (req.params.id) {
-  	logger.info('The server received a DELETE request for a post with the following post ID: ' + req.params.id);
+    logger.info('The server received a DELETE request for a post with the following post ID: ' + req.params.id);
     posts.posts.forEach(function(post, index) {
-    	if (post.id == req.params.id) {
-    		posts.posts.splice(index, 1);
-    		logger.info('The server successfully deleted the post with the post ID ' + post.id + '.');
-    		res.status(200).send({});
-    	}
+      if (post.id == req.params.id) {
+        posts.posts.splice(index, 1);
+        logger.info('The server successfully deleted the post with the post ID ' + post.id + '.');
+        res.status(200).send({});
+      }
     });
   }
 });
