@@ -73,7 +73,6 @@ var express = require('express'),
     cookieParser = require('cookie-parser'),
     bodyParser = require('body-parser'),
     session = require('express-session'),
-    uuid = require('node-uuid'),
     app = express();
 
 app.use(cookieParser());
@@ -83,9 +82,6 @@ app.use(bodyParser.json());
 app.use(session({
   resave: true,
   saveUninitialized: true,
-  genid: function(req) {
-    return uuid.v1();
-  },
   secret: 'telegram app'
 }));
 
@@ -118,11 +114,15 @@ passport.use(new LocalStrategy({
 ));
 
 passport.serializeUser(function(user, done) {
-  done(null, user);
+  done(null, user.id);
 });
 
-passport.deserializeUser(function(user, done) {
-  done(null, user);
+passport.deserializeUser(function(id, done) {
+  users.users.forEach(function(user) {
+    if (user.id == id) {
+      done(null, user);
+    }
+  });
 });
 
 function ensureAuthenticated(req, res, next) {
@@ -131,6 +131,16 @@ function ensureAuthenticated(req, res, next) {
   } else {
     return res.status(403).end();
   }
+}
+
+function generatePostId() {
+  return (+(posts.posts.sort(function(a, b) {
+    if (a.id < b.id) {
+      return -1;
+    } else {
+      return 1;
+    }
+  })[posts.posts.length - 1].id) + 1).toString();
 }
 
 app.post('/api/users', function(req, res) {
@@ -143,18 +153,18 @@ app.post('/api/users', function(req, res) {
       return next(err);
     }
     console.log(req.user);
+    res.status(200).send({'user': user});
   });
-  res.status(200).send({'user': user});
 });
 
 app.get('/api/users', function(req, res, next) {
   if (req.query.isAuthenticated) {
     logger.info('The server received a GET request for an authentcated user');
     if (req.isAuthenticated && req.user) {
-      res.send({'users': [req.user]});
+      return res.send({'users': [req.user]});
       logger.info('The authenticated user was found and returned to the client');
     } else {
-      res.send({'users': []});
+      return res.send({'users': []});
       logger.info('No authenticated user was found, and an empty object was returned to the client.');
     }
   }
@@ -165,7 +175,7 @@ app.get('/api/users', function(req, res, next) {
         return next(err); 
       }
       if (!user) { 
-        return res.redirect('/login'); 
+        return res.status(404).end(); 
       }
       req.login(user, function(err) {
         if (err) { return next(err); }
@@ -178,28 +188,28 @@ app.get('/api/users', function(req, res, next) {
     logger.info('The server received a GET request for a user with an email.');
     users.users.forEach(function(user) {
       if (user.email == req.query.email) {
-        res.send({'users': [user]});
+        return res.send({'users': [user]});
         logger.info('The server successfully retrieved and sent the user with the email.');
       }
     });
   }
   else {
     logger.info('The server received a GET request for all users.');
-    res.send(users);
+    return res.send(users);
     logger.info('The server successfully retrieved and sent all users.');
   }  
+  res.status(404).end();
 });
 
 app.get('/api/users/:id', function(req, res) {
-  if (req.params.id) {
-    logger.info('The server received a GET request for a user with the following user ID: ' + req.params.id);
-    users.users.forEach(function(user) {
-      if (user.id == req.params.id) {
-        res.send({'user': user});
-        logger.info('The server successfully retrieved and sent the user with the user ID ' + user.id + '.');
-      }
-    }); 
-  }
+  logger.info('The server received a GET request for a user with the following user ID: ' + req.params.id);
+  users.users.forEach(function(user) {
+    if (user.id == req.params.id) {
+      return res.send({'user': user});
+      logger.info('The server successfully retrieved and sent the user with the user ID ' + user.id + '.');
+    }
+  }); 
+  res.status(404).end();
 });
 
 app.get('/api/posts', function(req, res) {
@@ -211,15 +221,8 @@ app.get('/api/posts', function(req, res) {
 app.post('/api/posts', ensureAuthenticated, function(req, res) {
   if (req.user.id == req.body.post.author) {
     logger.info('The server received a POST request from authenticated author ' + req.body.post.author + ' to add a post.');
-    var postId = (+(posts.posts.sort(function(a, b) {
-      if (a.id < b.id) {
-        return -1;
-      } else {
-        return 1;
-      }
-    })[posts.posts.length - 1].id) + 1).toString();
     var post = req.body.post;
-    post.id = postId;
+    post.id = generatePostId();
     console.log('post id: ' + post.id);
     posts.posts.push(post);
     logger.info('The server successfully added the post with the post ID ' + post.id + '.');
@@ -230,23 +233,20 @@ app.post('/api/posts', ensureAuthenticated, function(req, res) {
 });
 
 app.delete('/api/posts/:id', function(req, res) {
-  if (req.params.id) {
-    logger.info('The server received a DELETE request for a post with the following post ID: ' + req.params.id);
-    posts.posts.forEach(function(post, index) {
-      if (post.id == req.params.id) {
-        posts.posts.splice(index, 1);
-        logger.info('The server successfully deleted the post with the post ID ' + post.id + '.');
-        res.status(200).send({});
-      }
-    });
-  }
+  logger.info('The server received a DELETE request for a post with the following post ID: ' + req.params.id);
+  posts.posts.forEach(function(post, index) {
+    if (post.id == req.params.id) {
+      posts.posts.splice(index, 1);
+      logger.info('The server successfully deleted the post with the post ID ' + post.id + '.');
+      return res.status(200).send({});
+    }
+  });
+  res.status(404).end();
 });
 
 app.get('/api/logout', function(req, res) {
-  if (req.query.logout) {
-    req.logout();
-    res.status(200).send('Success');
-  }  
+  req.logout();
+  res.status(200).send('Success');
 });
 
 var server = app.listen(3000, function() {
