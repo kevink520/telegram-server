@@ -126,7 +126,7 @@ passport.deserializeUser(function(user, done) {
 });
 
 function ensureAuthenticated(req, res, next) {
-  if (req.isAuthenticated() && req.user.id == req.body.post.author) {
+  if (req.isAuthenticated()) {
     return next();
   } else {
     return res.status(403).end();
@@ -209,20 +209,24 @@ app.get('/api/posts', function(req, res) {
 });
 
 app.post('/api/posts', ensureAuthenticated, function(req, res) {
-  logger.info('The server received a POST request from authenticated author ' + req.body.post.author + ' to add a post.');
-  var postId = (+(posts.posts.sort(function(a, b) {
-    if (a.id < b.id) {
-      return -1;
-    } else {
-      return 1;
-    }
-  })[posts.posts.length - 1].id) + 1).toString();
-  var post = req.body.post;
-  post.id = postId;
-  console.log('post id: ' + post.id);
-  posts.posts.push(post);
-  logger.info('The server successfully added the post with the post ID ' + post.id + '.');
-  res.status(200).send({'post': post});
+  if (req.user.id == req.body.post.author) {
+    logger.info('The server received a POST request from authenticated author ' + req.body.post.author + ' to add a post.');
+    var postId = (+(posts.posts.sort(function(a, b) {
+      if (a.id < b.id) {
+        return -1;
+      } else {
+        return 1;
+      }
+    })[posts.posts.length - 1].id) + 1).toString();
+    var post = req.body.post;
+    post.id = postId;
+    console.log('post id: ' + post.id);
+    posts.posts.push(post);
+    logger.info('The server successfully added the post with the post ID ' + post.id + '.');
+    res.status(200).send({'post': post});
+  } else {
+    res.status(403).end();
+  }
 });
 
 app.delete('/api/posts/:id', function(req, res) {
