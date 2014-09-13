@@ -4,6 +4,7 @@ var passport = require('passport');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+var db = require('./database');
 var app = express();
 
 app.use(cookieParser());
@@ -37,6 +38,10 @@ app.use(function(err, req, res, next) {
 //  })[posts.posts.length - 1].id) + 1).toString();
 //}
 
-var server = app.listen(3000, function() {
-  console.log('Listening on port %d', server.address().port);
+db.on('error', console.error.bind(console, 'connection error:'));
+
+db.once('open', function() {
+  var server = app.listen(3000, function() {
+    console.log('Listening on port %d', server.address().port);
+  });
 });
