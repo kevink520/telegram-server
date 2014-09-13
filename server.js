@@ -4,6 +4,7 @@ var passport = require('passport');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+var MongoStore = require('connect-mongostore')(session);
 var db = require('./database');
 var app = express();
 
@@ -14,7 +15,8 @@ app.use(bodyParser.json());
 app.use(session({
   resave: true,
   saveUninitialized: true,
-  secret: 'telegram app'
+  secret: 'telegram app',
+  store: new MongoStore({'db': 'mongoDB'})
 }));
 
 app.use(passport.initialize());
