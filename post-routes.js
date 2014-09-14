@@ -12,7 +12,7 @@ router.get('/', function(req, res) {
   var Post = mongoose.model('Post');
   Post.find(function findCallback(err, posts) {
     if (err) {
-      console.error(err);
+      logger.error(err);
       return res.status(500).end();
     }
     var postsArray = [];
@@ -35,7 +35,7 @@ router.post('/', ensureAuthenticated, function(req, res) {
     });
     post.save(function saveCallback(err, post) {
       if (err) {
-        console.error(err);
+        logger.error(err);
         return res.status(500).end();
       }
       logger.info('The server successfully added the post.');
@@ -52,7 +52,7 @@ router.delete('/:_id', function(req, res) {
   var Post = mongoose.model('Post');
   Post.remove({ _id: req.params._id }, function removeCallback(err, post) {
     if (err) {
-      console.error(err);
+      logger.error(err);
       return res.status(500).end();
     }
     logger.info('The server successfully deleted the post with the post ID ' + req.params._id + '.');

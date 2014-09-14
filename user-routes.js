@@ -3,34 +3,48 @@ var logger = require('nlogger').logger(module);
 var mongoose = require('mongoose');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
+var bcrypt = require('bcrypt');
 var db = require('./database');
 var passport = require('./auth');
 var router = express.Router();
 
 router.post('/', function(req, res) {
   logger.info('The server received a POST request to add a user with the following username: ' + req.body.user.username);
-  var User = mongoose.model('User');
-  var user = new User({
-    username: req.body.user.username,
-    name: req.body.user.name,
-    password: req.body.user.password,
-    email: req.body.user.email,
-    photo: req.body.user.photo
-  });
-  logger.info('user: ' + user);
-  user.save(function saveCallback(err, user) {
+  bcrypt.genSalt(10, function(err, salt) {
     if (err) {
-      console.error(err);
+      logger.error(err);
       return status(500).end();
     }
-    logger.info('The server successfully added the user with the username ' + user.username + '.');
-    req.login(user, function(err) {
+    bcrypt.hash(req.body.user.password, salt, function(err, hash) {
       if (err) {
-        return next(err);
+        logger.error(err);
+        return status(500).end();
       }
-      logger.info('The server established a session.');
-      user.password = '';
-      res.status(200).send({'user': user});
+      var User = mongoose.model('User');
+      var user = new User({
+        username: req.body.user.username,
+        name: req.body.user.name,
+        password: hash,
+        email: req.body.user.email,
+        photo: req.body.user.photo
+      });
+      user.save(function saveCallback(err, user) {
+        if (err) {
+          logger.error(err);
+          return status(500).end();
+        }
+        logger.info('The server successfully added the user with the username ' + user.username + '.');
+        req.login(user, function(err) {
+          if (err) {
+            return next(err);
+          }
+          logger.info('The server established a session.');
+          user.password = '';
+          res.status(200).send({
+            'user': user
+          });
+        });
+      });
     });
   });
 });
@@ -40,11 +54,15 @@ router.get('/', function(req, res, next) {
     logger.info('The server received a GET request for an authenticated user');
     if (req.isAuthenticated && req.user) {
       req.user.password = '';
-      return res.send({'users': [req.user]});
+      return res.send({
+        'users': [req.user]
+      });
       logger.info('The authenticated user was found and returned to the client');
     } else {
       logger.info('No authenticated user was found, and an empty object was returned to the client.');
-      return res.send({'users': []});
+      return res.send({
+        'users': []
+      });
     }
   }
   else if (req.query.username && req.query.password) {
@@ -57,17 +75,23 @@ router.get('/', function(req, res, next) {
         return res.status(404).end(); 
       }
       req.login(user, function(err) {
-        if (err) { return next(err); }
+        if (err) { 
+          return next(err); 
+        }
         logger.info('Login with username ' + user.username + ' and the password was successful.');
         user.password = '';
-        return res.send({'users': [user]}); 
+        return res.send({
+          'users': [user]
+        }); 
       });
     })(req, res, next);
   }
   else if (req.query.username) {
     logger.info('The server received a GET request for a user with the req.query.username ' + req.query.username);
     var User = mongoose.model('User');
-    User.findOne({ username: req.query.username }, function findCallback(err, user) {
+    User.findOne({ 
+      username: req.query.username 
+    }, function findCallback(err, user) {
       if (err) {
         console.error(err);
         return res.status(500).end();
@@ -75,7 +99,9 @@ router.get('/', function(req, res, next) {
       if (user) {
         logger.info('The server successfully retrieved and sent the user with the req.query.username ' + req.query.username);
         user.password = '';
-        return res.send({ 'users': [user] });
+        return res.send({ 
+          'users': [user] 
+        });
       } else {
         logger.error('No user was found for the username ' + req.query.username);
         return res.status(404).end();
@@ -85,7 +111,9 @@ router.get('/', function(req, res, next) {
   else if (req.query.email) {
     logger.info('The server received a GET request for a user with an email.');
     var User = mongoose.model('User');
-    User.findOne({ email: req.query.email }, function findCallback(err, user) {
+    User.findOne({ 
+      email: req.query.email 
+    }, function findCallback(err, user) {
       if (err) {
         console.error(err);
         return res.status(500).end();
@@ -93,7 +121,9 @@ router.get('/', function(req, res, next) {
       if (user) {
         logger.info('The server successfully retrieved and sent the user with the email.');
         user.password = '';
-        return res.send({ 'users': [user] });
+        return res.send({ 
+          'users': [user] 
+        });
       } else {
         logger.error('No user was found for the email ' + req.query.email);
         return res.status(404).end();
@@ -105,7 +135,7 @@ router.get('/', function(req, res, next) {
     var User = mongoose.model('User');
     User.find(function findCallback(err, users) {
       if (err) {
-        console.error(err);
+        logger.error(err);
         return res.status(500).end();
       }
       var usersArray = [];
@@ -114,7 +144,9 @@ router.get('/', function(req, res, next) {
         usersArray.push(user);
       });
       logger.info('The server successfully retrieved and sent all users.');
-      return res.send({ 'users': usersArray });
+      return res.send({ 
+        'users': usersArray 
+      });
     });
   }  
 });
@@ -122,9 +154,11 @@ router.get('/', function(req, res, next) {
 router.get('/:_id', function(req, res) {
   logger.info('The server received a GET request for a user with the following _id: ' + req.params._id);
   var User = mongoose.model('User');
-  User.findOne({ _id: req.params._id }, function findCallback(err, user) {
+  User.findOne({
+    _id: req.params._id 
+  }, function findCallback(err, user) {
     if (err) {
-      console.error(err);
+      logger.error(err);
       return res.status(500).end();
     }
     if (!user) {
@@ -133,16 +167,20 @@ router.get('/:_id', function(req, res) {
     }
     logger.info('The server successfully retrieved and sent the user with _id ' + user._id + '.');
     user.password = '';
-    return res.send({ 'user': user });
+    return res.send({ 
+      'user': user 
+    });
   });
 });
 
 /*router.get('/:username', function(req, res) {
   logger.info('The server received a GET request for a user with the following req.params.username: ' + req.params.username);
   var User = mongoose.model('User');
-  User.findOne({ username: req.params.username }, function findCallback(err, user) {
+  User.findOne({ 
+    username: req.params.username 
+  }, function findCallback(err, user) {
     if (err) {
-      console.error(err);
+      logger.error(err);
       return res.status(500).end();
     }
     if (!user) {
@@ -151,7 +189,9 @@ router.get('/:_id', function(req, res) {
     }
     logger.info('The server successfully retrieved and sent the user with the req.params.username ' + user.username + '.');
     user.password = '';
-    return res.send({ 'user': user });
+    return res.send({ 
+      'user': user 
+    });
   });
 });*/
 
