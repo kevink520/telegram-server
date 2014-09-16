@@ -4,8 +4,13 @@ var mongoose = require('mongoose');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var bcrypt = require('bcrypt');
+var md5 = require('MD5');
 var db = require('./database');
 var passport = require('./auth');
+var template = require('./password-email-template');
+var api_key = 'key-636fa3e1ed0b406de09c01ad36cbe112';
+var domain = 'sandboxc917541ba8e74525b4d15356f5810e72.mailgun.org';
+var mailgun = require('mailgun-js')({apiKey: api_key, domain: domain});
 var router = express.Router();
 
 router.post('/', function(req, res) {
@@ -13,12 +18,12 @@ router.post('/', function(req, res) {
   bcrypt.genSalt(10, function(err, salt) {
     if (err) {
       logger.error(err);
-      return status(500).end();
+      return res.status(500).end();
     }
     bcrypt.hash(req.body.user.password, salt, function(err, hash) {
       if (err) {
         logger.error(err);
-        return status(500).end();
+        return res.status(500).end();
       }
       var User = mongoose.model('User');
       var user = new User({
@@ -28,10 +33,10 @@ router.post('/', function(req, res) {
         email: req.body.user.email,
         photo: req.body.user.photo
       });
-      user.save(function saveCallback(err, user) {
+      user.save(function(err, user) {
         if (err) {
           logger.error(err);
-          return status(500).end();
+          return res.status(500).end();
         }
         logger.info('The server successfully added the user with the username ' + user.username + '.');
         req.login(user, function(err) {
@@ -91,9 +96,9 @@ router.get('/', function(req, res, next) {
     var User = mongoose.model('User');
     User.findOne({ 
       username: req.query.username 
-    }, function findCallback(err, user) {
+    }, function(err, user) {
       if (err) {
-        console.error(err);
+        logger.error(err);
         return res.status(500).end();
       }
       if (user) {
@@ -103,7 +108,7 @@ router.get('/', function(req, res, next) {
           'users': [user] 
         });
       } else {
-        logger.error('No user was found for the username ' + req.query.username);
+        logger.info('No user was found for the username ' + req.query.username);
         return res.status(404).end();
       }
     });
@@ -113,19 +118,65 @@ router.get('/', function(req, res, next) {
     var User = mongoose.model('User');
     User.findOne({ 
       email: req.query.email 
-    }, function findCallback(err, user) {
+    }, function(err, user) {
       if (err) {
-        console.error(err);
+        logger.error(err);
         return res.status(500).end();
       }
       if (user) {
-        logger.info('The server successfully retrieved and sent the user with the email.');
-        user.password = '';
-        return res.send({ 
-          'users': [user] 
+        logger.info('The server successfully retrieved the user with the email ' + req.query.email);
+        var newPassword = Math.random().toString(36).slice(-8);
+        var salt = user.username + 'telegramApp2014';
+        var md5Password = md5(salt + newPassword);
+        bcrypt.genSalt(10, function(err, salt) {
+          if (err) {
+            logger.error(err);
+            return res.status(500).end();
+          }
+          bcrypt.hash(md5Password, salt, function(err, hash) {
+            if (err) {
+              logger.error(err);
+              return res.status(500).end();
+            }
+            User.update({
+              username: user.username
+            }, {
+              $set: {
+                password: hash
+              }
+            }, null, function(err, numAffected) {
+              if (err) {
+                logger.error(err);
+                return res.status(500).end();
+              }
+              if (numAffected) {
+                logger.info('Successfully reset password.');
+                var passwordData = { password: newPassword };
+                var html = template(passwordData);
+                var data = {
+                  from: 'The Telegram App Team <kevinkim75@gmail.com>',
+                  to: user.email,
+                  subject: 'Your New Password for the Telegram App',
+                  html: html
+                };
+
+                mailgun.messages().send(data, function(err, body) {
+                  if (err) {
+                    logger.error(err);
+                    return res.status(500).end();
+                  }
+                  logger.info(body);
+                  user.password = '';
+                  return res.send({ 
+                    'users': [user] 
+                  });
+                });
+              }
+            });
+          });
         });
       } else {
-        logger.error('No user was found for the email ' + req.query.email);
+        logger.info('No user was found for the email ' + req.query.email);
         return res.status(404).end();
       }
     });
