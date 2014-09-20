@@ -1,18 +1,15 @@
 var express = require('express');
 var logger = require('nlogger').logger(module);
 var mongoose = require('mongoose');
-var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
-var db = require('./database');
-var ensureAuthenticated = require('./ensure-authenticated');
+var ensureAuthenticated = require('../../authentication/ensure-authenticated');
 var router = express.Router();
 
 router.get('/', function(req, res) {
   logger.info('The server received a GET request for all posts.');
   var Post = mongoose.model('Post');
-  Post.find(function findCallback(err, posts) {
+  Post.find(function(err, posts) {
     if (err) {
-      logger.error(err);
+      logger.error('An error occurred while retrieving all posts from the database. ' + err);
       return res.status(500).end();
     }
     var postsArray = [];
@@ -33,9 +30,9 @@ router.post('/', ensureAuthenticated, function(req, res) {
       body: req.body.post.body,
       createdDate: req.body.post.createdDate
     });
-    post.save(function saveCallback(err, post) {
+    post.save(function(err, post) {
       if (err) {
-        logger.error(err);
+        logger.error('An error occurred while saving the post to the database. ' + err);
         return res.status(500).end();
       }
       logger.info('The server successfully added the post.');
@@ -50,9 +47,9 @@ router.post('/', ensureAuthenticated, function(req, res) {
 router.delete('/:_id', function(req, res) {
   logger.info('The server received a DELETE request for a post with the following post ID: ' + req.params._id);
   var Post = mongoose.model('Post');
-  Post.remove({ _id: req.params._id }, function removeCallback(err, post) {
+  Post.remove({ _id: req.params._id }, function(err, post) {
     if (err) {
-      logger.error(err);
+      logger.error('An error occurred while removing the post with the post ID: ' + req.params._id + ' from the database. ' + err);
       return res.status(500).end();
     }
     logger.info('The server successfully deleted the post with the post ID ' + req.params._id + '.');

@@ -5,7 +5,7 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var session = require('express-session');
 var MongoStore = require('connect-mongostore')(session);
-var db = require('./database');
+var db = require('./database/database');
 var app = express();
 
 app.use(cookieParser());
@@ -16,14 +16,16 @@ app.use(session({
   resave: true,
   saveUninitialized: true,
   secret: 'telegram app',
-  store: new MongoStore({'db': 'mongoDB'})
+  store: new MongoStore({
+    'db': 'telegramSessions'
+  })
 }));
 
 app.use(passport.initialize());
 
 app.use(passport.session());
 
-var router = require('./router')(app);
+var router = require('./router/router')(app);
 
 app.use(function(err, req, res, next) {
   logger.error('Error: ' + err);
