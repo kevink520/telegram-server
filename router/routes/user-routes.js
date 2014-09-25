@@ -13,14 +13,25 @@ var mailgun = require('mailgun-js')({
 });
 var router = express.Router();
 
-function returnUserToClient(user) {
+function returnUserToClient(user, currentUser) {
+  function isFollowedByCurrentUser(user, currentUser) {
+    if (!currentUser) {
+      return false;
+    }
+    if (user.followedBy.indexOf(currentUser._id) != -1) {
+      return true;
+    } else {
+      return false;
+    }
+  }
   var modifiedUser = {
     '_id': user._id,
     'username': user.username,
     'name': user.name,
     'password': '',
     'email': user.email,
-    'photo': user.photo
+    'photo': user.photo,
+    'followedByCurrentUser': isFollowedByCurrentUser(user, currentUser)
   };
   return modifiedUser;
 }
@@ -43,7 +54,9 @@ router.post('/', function(req, res) {
         name: req.body.user.name,
         password: hash,
         email: req.body.user.email,
-        photo: req.body.user.photo
+        photo: req.body.user.photo,
+        followedBy: [],
+        follows: []
       });
       user.save(function(err, user) {
         if (err) {
@@ -57,7 +70,7 @@ router.post('/', function(req, res) {
           }
           logger.info('The server established a session.');
           res.status(200).send({
-            'user': returnUserToClient(user)
+            'user': returnUserToClient(user, req.user)
           });
         });
       });
@@ -65,7 +78,136 @@ router.post('/', function(req, res) {
   });
 });
 
-function handleQueryByAuthentiationStatus(req, res) {
+function addProfiledUserAsFollowee(req, res, User) {
+  User.update({
+    _id: req.user._id
+  }, {
+    $addToSet: {
+      follows: req.params._id
+    }
+  }, null, function(err, numAffected) {
+    if (err) {
+      logger.error('An error occurred while updating the current user\'s follows field. ' + err);
+      return res.status(500).end();
+    }
+    if (numAffected) {
+      logger.info('The server successfully added the profiled user\'s _id to the current user\'s follows field.');
+    } else {
+      logger.error('No current user\'s record was updated in the database.');
+      return res.status(500).end();
+    }
+  });
+}
+
+function addCurrentUserAsFollower(req, res, User) {
+  User.update({
+    _id: req.params._id 
+  }, {
+    $addToSet: {
+      followedBy: req.user._id
+    }
+  }, null, function(err, numAffected) {
+    if (err) {
+      logger.error('An error occurred while updating the profiled user\'s followedBy field. ' + err);
+      return res.status(500).end();
+    }
+    if (numAffected) {
+      logger.info('The server successfully added the current user\'s _id to the profiled user\'s followedBy field.');
+    } else {
+      logger.error('No profiled user\'s record was updated in the database.');
+      return res.status(500).end();
+    }
+  });
+}
+
+function returnUpdatedUser(req, res, User) {
+  User.findOne({
+    _id: req.params._id 
+  }, function(err, user) {
+    if (err) {
+      logger.error('An error occurred while retrieving the updated profiled user with an _id from the database. ' + err);
+      return res.status(500).end();
+    }
+    if (!user) {
+      logger.error('No updated profiled user was found for the _id ' + req.params._id);
+      return res.status(404).end();
+    }
+    logger.info('The server successfully retrieved and sent the updated profiled user with _id ' + user._id + '.');
+    return res.send({ 
+      'user': returnUserToClient(user, req.user) 
+    });
+  });
+}
+
+function removeProfiledUserFromFollowees(req, res, User) {
+  User.update({
+    _id: req.user._id
+  }, {
+    $pull: {
+      follows: req.params._id
+    }
+  }, {
+    multi: true
+  }, function(err, numAffected) {
+    if (err) {
+      logger.error('An error occurred while removing the profiled user\'s _id from the current user\'s follows field. ' + err);
+      return res.status(500).end();
+    }
+    if (numAffected) {
+      logger.info('The server successfully removed the profiled user\'s _id from the current user\'s follows field.');
+    } else {
+      logger.error('No current user\'s record was updated in the database.');
+      return res.status(500).end();
+    }
+  });
+}
+
+function removeCurrentUserFromFollowers(req, res, User) {
+  var User = mongoose.model('User');
+  User.update({
+    _id: req.params._id
+  }, {
+    $pull: {
+      followedBy: req.user._id
+    }
+  }, {
+    multi: true
+  }, function(err, numAffected) {
+    if (err) {
+      logger.error('An error occurred while updating the profiled user\'s followedBy field. ' + err);
+      return res.status(500).end();
+    }
+    if (numAffected) {
+      logger.info('The server successfully removed the current user from the profiled user\'s followedBy field.');
+    } else {
+      logger.error('No profiled user\'s record was updated in the database.');
+      return res.status(500).end();
+    }
+  });
+}
+
+router.put('/:_id', function(req, res) {
+  logger.info('The server received a PUT request for a user with the following _id: ' + req.params._id);
+  if (!req.user) {
+    logger.error('No authenticated user was found, and the follower/followee information was not updated.');
+    return res.status(500).end();
+  }
+  var User = mongoose.model('User');
+  if (req.body.user.followedByCurrentUser) {
+    addProfiledUserAsFollowee(req, res, User);
+    addCurrentUserAsFollower(req, res, User);
+    returnUpdatedUser(req, res, User);
+  } else if (req.body.user.followedByCurrentUser === false) {
+    removeProfiledUserFromFollowees(req, res, User);
+    removeCurrentUserFromFollowers(req, res, User);
+    returnUpdatedUser(req, res, User);
+  } else {
+    logger.error('No followedByCurrentUser value was provided.');
+    res.status(500).end();
+  }
+});
+
+function handleAuthenticatedUserRequest(req, res) {
   logger.info('The server received a GET request for an authenticated user');
   if (req.isAuthenticated && req.user) {
     return res.send({
@@ -97,7 +239,7 @@ function handleQueryByUsenameAndPassword(req, res, next) {
       }
       logger.info('Login with username ' + user.username + ' and the password was successful.');
       return res.send({
-        'users': [returnUserToClient(user)]
+        'users': [returnUserToClient(user, req.user)]
       }); 
     });
   })(req, res, next);
@@ -116,7 +258,7 @@ function handleQueryByUsernameRequest(req, res) {
     if (user) {
       logger.info('The server successfully retrieved and sent the user with the req.query.username ' + req.query.username);
       return res.send({ 
-        'users': [returnUserToClient(user)] 
+        'users': [returnUserToClient(user, req.user)] 
       });
     } else {
       logger.info('No user was found for the username ' + req.query.username);
@@ -151,7 +293,7 @@ function handleQueryByEmailRequest(req, res) {
             return res.status(500).end();
           }
           User.update({
-            username: user.username
+            _id: user._id
           }, {
             $set: {
               password: hash
@@ -170,7 +312,9 @@ function handleQueryByEmailRequest(req, res) {
                 }
                 var source = data.toString();
                 var template = Handlebars.compile(source);
-                var passwordData = { password: newPassword };
+                var passwordData = { 
+                  password: newPassword 
+                };
                 var html = template(passwordData);
                 var emailData = {
                   from: 'The Telegram App Team <kevinkim75@gmail.com>',
@@ -186,7 +330,7 @@ function handleQueryByEmailRequest(req, res) {
                   }
                   logger.info(body);
                   return res.send({ 
-                    'users': [returnUserToClient(user)] 
+                    'users': [returnUserToClient(user, null)] 
                   });
                 });
               });               
@@ -201,6 +345,91 @@ function handleQueryByEmailRequest(req, res) {
   });
 }
 
+function handleQueryByFollowedBy(req, res) {
+  logger.info('The server received a GET request for all followees of the profiled user.');
+  var User = mongoose.model('User');
+  User.findById(req.query.followedBy, 'follows', function(err, user) {
+    if (err) {
+      logger.error('An error occurred while retrieving the profiled user\'s follows array. ' + err);
+      return res.status(500).end();
+    }
+    if (!user) {
+      logger.error('The server found no user with the provided profiled user id. The server returned a 404 status code.');
+      return res.status(404).end();
+    }
+    logger.info('The server successfully found a user object with provided profiled user id.');
+    if (!user.follows) {
+      logger.error('The server found no follows array for the profiled user. The server returned a 404 status code.');
+      return res.status(404).end();
+    }
+    if (!user.follows.length) {
+      logger.info('The profiled user has no followees. The server returned an object with an empty array for the users field.');
+      return res.send({
+        users: []
+      });
+    }
+    var orQueryArray = user.follows.map(function(followeeId) {
+      return {
+        _id: followeeId
+      };
+    });
+    User.find({
+      $or: orQueryArray
+    }, function(err, users) {
+      if (err) {
+        logger.error('An error occurred while retrieving followees of the profiled user.');
+        return res.status(500).end();
+      }
+      logger.info('The server successfully retrieved and sent all followees of the profiled user.');
+      return res.send({
+        users: users
+      });
+    });
+  });
+}
+
+function handleQueryByFollows(req, res) {
+  logger.info('The server received a GET request for all followers of the profiled user.');
+  var User = mongoose.model('User');
+  User.findById(req.query.follows, 'followedBy', function(err, user) {
+    if (err) {
+      logger.error('An error occurred while finding the user object containing followedBy array for the profiled user.');
+      return res.status(500).end();
+    }
+    if (!user) {
+      logger.error('The server found no user with the provided _id for the profiled user. The server returned a 404 status code.');
+      return res.status(404).end();
+    }
+    if (!user.followedBy) {
+      logger.error('The server found no followedBy array for the profiled user. The server returned a 404 status code.');
+      return res.status(404).end();
+    }
+    if (!user.followedBy.length) {
+      logger.info('The profiled user has no followers. The server returned an object with an empty array for the users field.');
+      return res.send({
+        users: []
+      });
+    }
+    var orQueryArray = user.followedBy.map(function(followerId) {
+      return {
+        _id: followerId
+      };
+    });
+    User.find({
+      $or: orQueryArray
+    }, function(err, users) {
+      if (err) {
+        logger.error('An error occurred while retrieving the followers of the profiled user.');
+        res.status(500).end();
+      }
+      logger.info('The server successfully retrieved and sent all followers of the profiled user.');
+      res.send({
+        users: users
+      });
+    });
+  });
+}
+
 function handleRequestForAllUsers(req, res) {
   logger.info('The server received a GET request for all users.');
   var User = mongoose.model('User');
@@ -211,7 +440,7 @@ function handleRequestForAllUsers(req, res) {
     }
     var usersArray = [];
     (users || []).forEach(function(user) {
-      usersArray.push(returnUserToClient(user));
+      usersArray.push(returnUserToClient(user, req.user));
     });
     logger.info('The server successfully retrieved and sent all users.');
     return res.send({ 
@@ -222,13 +451,17 @@ function handleRequestForAllUsers(req, res) {
 
 router.get('/', function(req, res, next) {
   if (req.query.isAuthenticated) {
-    handleQueryByAuthentiationStatus(req, res);
+    handleAuthenticatedUserRequest(req, res);
   } else if (req.query.username && req.query.password) {
     handleQueryByUsenameAndPassword(req, res, next);
   } else if (req.query.username) {
     handleQueryByUsernameRequest(req, res);
   } else if (req.query.email) {
     handleQueryByEmailRequest(req, res);
+  } else if (req.query.followedBy) {
+    handleQueryByFollowedBy(req, res);
+  } else if (req.query.follows) {
+    handleQueryByFollows(req, res);
   } else {
     handleRequestForAllUsers(req, res);
   }
@@ -239,7 +472,7 @@ router.get('/:_id', function(req, res) {
   var User = mongoose.model('User');
   User.findOne({
     _id: req.params._id 
-  }, function findCallback(err, user) {
+  }, function(err, user) {
     if (err) {
       logger.error('An error occurred while retrieving a user with an _id from the database. ' + err);
       return res.status(500).end();
@@ -250,7 +483,7 @@ router.get('/:_id', function(req, res) {
     }
     logger.info('The server successfully retrieved and sent the user with _id ' + user._id + '.');
     return res.send({ 
-      'user': returnUserToClient(user) 
+      'user': returnUserToClient(user, req.user) 
     });
   });
 });

@@ -8,6 +8,8 @@ var MongoStore = require('connect-mongostore')(session);
 var db = require('./database/database');
 var app = express();
 
+var mongoose = require('mongoose');
+
 app.use(cookieParser());
 
 app.use(bodyParser.json());

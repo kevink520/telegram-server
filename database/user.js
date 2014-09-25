@@ -6,5 +6,7 @@ module.exports = new Schema({
   name: String,
   password: String,
   email: String,
-  photo: String
+  photo: String,
+  followedBy: Array,
+  follows: Array
 });
