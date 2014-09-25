@@ -71,7 +71,7 @@ function handleQueryByOwnedBy(req, res) {
   });
 }
 
-function handleRequestForAllUsers(req, res) {
+/*function handleRequestForAllUsers(req, res) {
   logger.info('The server received a GET request for all posts.');
   var Post = mongoose.model('Post');
   Post.find(function(err, posts) {
@@ -86,7 +86,7 @@ function handleRequestForAllUsers(req, res) {
     logger.info('The server successfully retrieved and sent all posts.');
     return res.send({ posts: postsArray });
   });
-}
+}*/
 
 router.get('/', function(req, res) {
   if (req.query.ownedByFolloweesOf) {
@@ -94,7 +94,8 @@ router.get('/', function(req, res) {
   } else if (req.query.ownedBy) {
     handleQueryByOwnedBy(req, res);
   } else {
-    handleRequestForAllUsers(req, res);
+    logger.error('The server received a GET request without proper query values. The server returned a 404 status code.');
+    res.status(404).end();
   }
 });
 
