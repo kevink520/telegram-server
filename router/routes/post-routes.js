@@ -4,10 +4,12 @@ var mongoose = require('mongoose');
 var ensureAuthenticated = require('../../authentication/ensure-authenticated');
 var router = express.Router();
 
-function handleQueryByOwnedByFolloweesOf(req, res) {
+function handleQueryOwnedByFolloweesOf(req, res) {
   logger.info('The server received a GET request for all posts owned by followees of the current user with _id ' + req.query.ownedByFolloweesOf);
   var User = mongoose.model('User');
-  User.findById(req.query.ownedByFolloweesOf, 'follows', function(err, user) {
+  User.findOne({
+    username: req.query.ownedByFolloweesOf
+  }, 'follows', function(err, user) {
     if (err) {
       logger.error('An error occurred while retrieving the follows array containing _ids of the current user\'s followees.' + err);
       return res.status(500).end();
@@ -17,13 +19,8 @@ function handleQueryByOwnedByFolloweesOf(req, res) {
       return res.status(404).end();
     }
     logger.info('The server found the user object.');
-    var orQueryArray = user.follows.map(function(followeeId) {
-      return {
-        author: followeeId
-      };
-    });
-    logger.info('The server generated the or query array.');
-    if (!orQueryArray.length) {
+    var followeeIds = user.follows;
+    if (!followeeIds.length) {
       logger.info('The server found no followees of the current user.');
       return res.send({
         posts: []
@@ -31,7 +28,9 @@ function handleQueryByOwnedByFolloweesOf(req, res) {
     }
     var Post = mongoose.model('Post');
     var posts = Post.find({ 
-      $or: orQueryArray
+      author: {
+        $in: followeeIds
+      }
     }, function(err, posts) {
       if (err) {
         logger.error('An error occurred while finding all posts owned by followees of the current user. ' + err);
@@ -48,9 +47,10 @@ function handleQueryByOwnedByFolloweesOf(req, res) {
   });
 }
 
-function handleQueryByOwnedBy(req, res) {
+function handleQueryOwnedBy(req, res) {
   logger.info('The server received a GET request for all posts owned by the profiled user.');
   var Post = mongoose.model('Post');
+  logger.info('Retrieving posts for ' + req.query.ownedBy);
   Post.find({
     author: req.query.ownedBy
   }, function(err, posts) {
@@ -90,9 +90,9 @@ function handleQueryByOwnedBy(req, res) {
 
 router.get('/', function(req, res) {
   if (req.query.ownedByFolloweesOf) {
-    handleQueryByOwnedByFolloweesOf(req, res);
+    handleQueryOwnedByFolloweesOf(req, res);
   } else if (req.query.ownedBy) {
-    handleQueryByOwnedBy(req, res);
+    handleQueryOwnedBy(req, res);
   } else {
     logger.error('The server received a GET request without proper query values. The server returned a 404 status code.');
     res.status(404).end();
@@ -125,7 +125,7 @@ router.post('/', ensureAuthenticated, function(req, res) {
 router.delete('/:_id', function(req, res) {
   logger.info('The server received a DELETE request for a post with the following post ID: ' + req.params._id);
   var Post = mongoose.model('Post');
-  Post.remove({
+  Post.findOneAndRemove({
     _id: req.params._id
   }, function(err, post) {
     if (err) {
