@@ -34,15 +34,32 @@ function handleQueryOwnedByFolloweesOf(req, res) {
     }, function(err, posts) {
       if (err) {
         logger.error('An error occurred while finding all posts owned by followees of the current user. ' + err);
+        return res.status(500).end();
       }
       if (!posts) {
         logger.error('The server found no posts owned by followees of the current user.');
         return res.status(404).end();
       }
-      logger.info('The server successfully retrieved and sent all posts owned by followees of the current user.');
-      res.send({
-        posts: posts
-      });
+      logger.info('The server successfully retrieved all posts owned by followees of the current user.');
+      User.find({
+        _id: {
+          $in: followeeIds
+        }
+      }, function(err, users) {
+        if (err) {
+          logger.error('An error occurred while finding all followees of the current user. ' + err);
+          return res.status(500).end();
+        }
+        if (!users) {
+          logger.error('The server found no followees of the current user.');
+          return res.status(404).end();
+        }
+        logger.info('The server successfully retrieved all followees of the current user and sent the posts and the users.');
+        res.send({
+          posts: posts,
+          users: users
+        });
+      });      
     });    
   });
 }
