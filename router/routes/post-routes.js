@@ -27,10 +27,35 @@ function handleQueryOwnedByFolloweesOf(req, res) {
       });
     }
     var Post = mongoose.model('Post');
-    var posts = Post.find({ 
-      author: {
-        $in: followeeIds
-      }
+    var posts = Post.find({
+      $or: [
+        {
+          $and: [
+            {
+              author: {
+                $in: followeeIds
+              }
+            },
+            {
+              repostedBy: null
+            }
+          ]
+        },
+        {
+          $and: [
+            {
+              repostedBy: {
+                $in: followeeIds
+              }
+            },
+            {
+              repostedBy: {
+                $ne: null
+              }
+            }
+          ]
+        }
+      ]
     }, function(err, posts) {
       if (err) {
         logger.error('An error occurred while finding all posts owned by followees of the current user. ' + err);
@@ -69,7 +94,30 @@ function handleQueryOwnedBy(req, res) {
   var Post = mongoose.model('Post');
   logger.info('Retrieving posts for ' + req.query.ownedBy);
   Post.find({
-    author: req.query.ownedBy
+    $or: [
+      {
+        $and: [
+          {
+            author: req.query.ownedBy
+          },
+          {
+            repostedBy: null
+          }
+        ]
+      },
+      {
+      //  $and: [
+      //    {
+            repostedBy: req.query.ownedBy
+       //   },
+       //   {
+       //     repostedBy: {
+       //       $ne: null
+       //     }
+       //   }
+       // ]
+      }
+    ]   
   }, function(err, posts) {
     if (err) {
       logger.error('An error occurred while finding all posts owned by the profiled user.');
@@ -117,11 +165,12 @@ router.get('/', function(req, res) {
 });
 
 router.post('/', ensureAuthenticated, function(req, res) {
-  if (req.user._id == req.body.post.author) {
-    logger.info('The server received a POST request from authenticated author ' + req.body.post.author + ' to add a post.');
+  if (req.user._id == req.body.post.author || req.user._id == req.body.post.repostedBy) {
+    logger.info('The server received a POST request from authenticated author or reposter to add a post.');
     var Post = mongoose.model('Post');
     var post = new Post({ 
       author: req.body.post.author,
+      repostedBy: req.body.post.repostedBy,
       body: req.body.post.body,
       createdDate: req.body.post.createdDate
     });
