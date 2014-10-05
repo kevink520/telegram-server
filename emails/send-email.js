@@ -53,7 +53,8 @@ module.exports = function sendEmail(newPassword, user, res) {
 
     mailgun.messages().send(emailData, function(err, body) {
       if (err) {
-        logger.error('An error occurred while sending the email containing the new password to the user. ' + err);
+        logger.error('An error occurred while sending the email containing the ' 
+          + 'new password to the user. ' + err);
         return res.status(500).end();
       }
       logger.info('Successfully sent email. ' + body);

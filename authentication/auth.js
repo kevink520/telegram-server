@@ -11,7 +11,8 @@ passport.use(new LocalStrategy(
       username: username 
     }, function callback(err, user) {
       if (err) {
-        logger.error('An error occurred while finding a user with the username ' + username + ' from the database. ' + err);
+        logger.error('An error occurred while finding a user with the username ' 
+          + username + ' from the database. ' + err);
         return done(err);
       }
       if (!user) {
@@ -22,7 +23,8 @@ passport.use(new LocalStrategy(
       }
       bcrypt.compare(password, user.password, function(err, res) {
         if (err) {
-          logger.error('An error occurred while comparing the submitted password with the password of the user from the database. ' + err);
+          logger.error('An error occurred while comparing the submitted password' 
+            + ' with the password of the user from the database. ' + err);
           return done(err);
         }
         if (!res) {
@@ -48,7 +50,8 @@ passport.deserializeUser(function(id, done) {
     _id: id 
   }, function callback(err, user) {
     if (err) {
-      logger.error('An error occurred while finding the user with the _id ' + id + ' from the database. ' + err);
+      logger.error('An error occurred while finding the user with the _id ' + id 
+        + ' from the database. ' + err);
       return done(err);
     }
     if (!user) {

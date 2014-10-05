@@ -3,7 +3,7 @@ var Schema = mongoose.Schema;
 
 module.exports = new Schema({
   author: String,
-  repostedBy: String,
+  repostedFrom: String,
   body: String,
   createdDate: String
 });
