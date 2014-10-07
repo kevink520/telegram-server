@@ -17,7 +17,9 @@ function findUsersByIds(req, res, ids) {
       res.status(500).end();
     } else {
       logger.info('The server successfully retrieved the users.');
-      return users;
+      return (users || []).map(function(user) {
+        return user;
+      });
     }
   });
 }
@@ -47,7 +49,7 @@ function findPostsOfCurrentUserAndFollowees(req, res) {
     logger.info('The server successfully retrieved all posts owned by the ' 
       + 'current user and the followees.');
     
-    var users = findUsersByIds(req, res, currentUserAndFolloweesIds) || [];
+    var users = findUsersByIds(req, res, currentUserAndFolloweesIds);
 
     res.send({
       posts: posts,
