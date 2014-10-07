@@ -47,11 +47,21 @@ function createAndSaveUser(req, res, hash) {
     if (err) {
       logger.error('An error occurred while saving the user to the database. ' 
         + err);
-      res.status(500).end();
+      return res.status(500).end();
     } else {
       logger.info('The server successfully added the user with the username ' 
         + user.username + '.');
-      return user;
+      req.login(user, function(err) {
+        if (err) {
+          logger.error('An error occurred while establishing a session. '
+            + err);
+          return res.status(500).end();
+        }
+        logger.info('The server established a session.');
+        res.status(200).send({
+          'user': returnUserToClient(user, req.user)
+        });
+      });
     }
   });
 }
@@ -71,18 +81,7 @@ router.post('/', function(req, res) {
           + 'bcrypt. ' + err);
         return res.status(500).end();
       }
-
-      var user = createAndSaveUser(req, res, hash);
-      
-      req.login(user, function(err) {
-        if (err) {
-          return next(err);
-        }
-        logger.info('The server established a session.');
-        res.status(200).send({
-          'user': returnUserToClient(user, req.user)
-        });
-      });
+      createAndSaveUser(req, res, hash);
     });
   });
 });
@@ -212,7 +211,7 @@ function addUserToFollow(req, res) {
         + 'information to the database.');
       return res.status(500).end();
     }
-    returnUpdatedUser(req, res, User);
+    returnUpdatedUser(req, res);
   });  
 }
 
@@ -230,7 +229,7 @@ function removeUserToUnfollow(req, res) {
         callback);
     }
   ], function(err) {
-    returnUpdatedUser(req, res, User);
+    returnUpdatedUser(req, res);
   });
 }
 
