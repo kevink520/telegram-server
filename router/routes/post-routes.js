@@ -17,9 +17,7 @@ function findUsersByIds(req, res, ids) {
       res.status(500).end();
     } else {
       logger.info('The server successfully retrieved the users.');
-      return (users || []).map(function(user) {
-        return user;
-      });
+      return users;
     }
   });
 }
