@@ -33,7 +33,10 @@ function filterUsersForEmber(users, currentUser) {
   var filteredUsers = (users || []).map(function(user) {
     return emberUser(user, currentUser);
   });
-  logger.info('filteredUsers[0].username: ' + filteredUsers[0].username);
+  filteredUsers.forEach(function(user, index) {
+    logger.info('filteredUsers[' + index + '].username: ' + user.username);
+  });
+  
   return filteredUsers;
 }
 
@@ -66,10 +69,11 @@ function findUsersByIds(req, res, ids, postsArray, next) {
         logger.error('An error occurred while finding the user. ' + err);
         res.status(500).end();
       } else {
-        logger.info('The server successfully retrieved the user.' +
-                    'user: ' + user + '; req.user: ' + req.user);
+        logger.info('The server successfully retrieved the user.');
         usersArray = filterUsersForEmber([user], req.user);
-        logger.info('usersArray[0].username: ' + usersArray[0].username);
+        usersArray.forEach(function(user) {
+          logger.info('user.username: ' + user.username + '\n');
+        });     
         next(res, postsArray, usersArray);
       }
     });
@@ -150,7 +154,7 @@ function handleQueryProfilePostsRequest(req, res) {
                    'profiled user.');
       return res.status(500).end();
     }
-    if (!posts) {
+    if (!posts.length) {
       logger.info('The server found no posts owned by the profiled user.');
       return res.send({
         'posts': []
@@ -159,12 +163,18 @@ function handleQueryProfilePostsRequest(req, res) {
 
     var userIds = [req.query.ownedBy];
 
-    logger.info('posts: ' + posts);
+  //  logger.info('posts[1]: ' + posts[1]);
     (posts || []).forEach(function(post) {
-      if (post.postedFrom) {
-        userIds.push(post.postedFrom);
+      if (post.repostedFrom) {
+        logger.info('post.repostedFrom: ' + post.repostedFrom);
+        userIds.push(post.repostedFrom);
       }
     });
+
+    userIds.forEach(function(id, index) {
+      logger.info('userId[' + index + ']: ' + id);
+    });
+
     var uniqueUserIds = userIds.reduce(function(a, b) {
       if (a.indexOf(b) < 0) {
         a.push(b);
@@ -172,7 +182,10 @@ function handleQueryProfilePostsRequest(req, res) {
       return a;
     }, []);
 
-    logger.info('uniqueUserIds: ' + uniqueUserIds);
+ //   uniqueUserIds.forEach(function(id, index) {
+   //   logger.info('uniqueUserId[' + index + ']: ' + id);
+   // });
+    
 
     findUsersByIds(req, res, uniqueUserIds, posts, sendPostsAndUsersResponse);
 
