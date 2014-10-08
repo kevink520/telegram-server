@@ -421,7 +421,7 @@ function handleQueryForFolloweesRequest(req, res) {
       logger.info('The profiled user has no followees. The server returned an ' 
         + 'object with an empty array for the users field.');
       return res.send({
-        users: []
+        'users': []
       });
     }
     var followeeIds = user.follows;
@@ -438,7 +438,7 @@ function handleQueryForFolloweesRequest(req, res) {
       logger.info('The server successfully retrieved and sent all followees of ' 
         + 'the profiled user.');
       return res.send({
-        users: emberUsers(users, req.user)
+        'users': emberUsers(users, req.user)
       });
     });
   });
@@ -467,7 +467,7 @@ function handleQueryForFollowersRequest(req, res) {
       logger.info('The profiled user has no followers. The server returned an ' 
         + 'object with an empty array for the users field.');
       return res.send({
-        users: []
+        'users': []
       });
     }
     var followerIds = user.followedBy;
@@ -484,7 +484,7 @@ function handleQueryForFollowersRequest(req, res) {
       logger.info('The server successfully retrieved and sent all followers of ' 
         + 'the profiled user.');
       res.send({
-        users: emberUsers(users, req.user)
+        'users': emberUsers(users, req.user)
       });
     });
   });

@@ -5,29 +5,90 @@ var ensureAuthenticated = require('../../authentication/ensure-authenticated');
 var router = express.Router();
 var Post = mongoose.model('Post');
 
-function filterUsersForEmber(users) {
+function isFollowedByCurrentUser(user, currentUser) {
+  if (!currentUser) {
+    return false;
+  }
+  if (user.followedBy.indexOf(currentUser._id) != -1) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function emberUser(user, currentUser) {
+  var modifiedUser = {
+    '_id': user._id,
+    'username': user.username,
+    'name': user.name,
+    'password': '',
+    'email': user.email,
+    'photo': user.photo,
+    'followedByCurrentUser': isFollowedByCurrentUser(user, currentUser)
+  };
+  return modifiedUser;
+}
+
+function filterUsersForEmber(users, currentUser) {
   var filteredUsers = (users || []).map(function(user) {
-    user.password = '';
-    return user;
+    return emberUser(user, currentUser);
   });
+  logger.info('filteredUsers[0].username: ' + filteredUsers[0].username);
   return filteredUsers;
 }
 
-function findUsersByIds(req, res, ids) {
-  var User = mongoose.model('User');
-  User.find({
-    _id: {
-      $in: ids
-    }
-  }, function(err, users) {
-    if (err) {
-      logger.error('An error occurred while finding the users. ' + err);
-      res.status(500).end();
-    } else {
-      logger.info('The server successfully retrieved the users.');
-      return filterUsersForEmber(users);
-    }
+function sendPostsAndUsersResponse(res, postsArray, usersArray) {
+  logger.info('The server successfully retrieved and sent the posts and ' +
+                'the users. ' + postsArray[0] + usersArray[0].username);
+  res.send({
+    'posts': postsArray,
+    'users': usersArray
   });
+}
+
+function sendPostAndUsersResponse(res, postsArray, usersArray) {
+  logger.info('The server successfully retrieved and sent the post and ' +
+                'the users. ' + postsArray[0] + usersArray[0].username);
+  res.send({
+    'post': postsArray[0],
+    'users': usersArray
+  });
+}
+
+function findUsersByIds(req, res, ids, postsArray, next) {
+  var usersArray;
+  var User = mongoose.model('User');
+  if (!ids.length) {
+    usersArray = [];
+  } else if (ids.length === 1) {
+    User.findById(ids[0], function(err, user) {
+      if (err) {
+        logger.error('An error occurred while finding the user. ' + err);
+        res.status(500).end();
+      } else {
+        logger.info('The server successfully retrieved the user.' +
+                    'user: ' + user + '; req.user: ' + req.user);
+        usersArray = filterUsersForEmber([user], req.user);
+        logger.info('usersArray[0].username: ' + usersArray[0].username);
+        next(res, postsArray, usersArray);
+      }
+    });
+  } else {
+    User.find({
+      _id: {
+        $in: ids
+      }
+    }, function(err, users) {
+      if (err) {
+        logger.error('An error occurred while finding the users. ' + err);
+        res.status(500).end();
+      } else {
+        logger.info('The server successfully retrieved the users.');
+        usersArray = filterUsersForEmber(users, req.user);
+        next(res, postsArray, usersArray);
+      }
+    });
+  } 
 }
 
 function handleQueryDashboardsPostsRequest(req, res) {
@@ -54,14 +115,14 @@ function handleQueryDashboardsPostsRequest(req, res) {
     }
     logger.info('The server successfully retrieved all posts owned by the ' +
                 'current user and the followees.');
-    var repostedFromArray = [];
+    var repostedFromIds = [];
     (posts || []).forEach(function(post) {
       if (post.repostedFrom) {
-        repostedFromArray.push(post.repostedFrom);
+        repostedFromIds.push(post.repostedFrom);
       }
     });
 
-    var combinedIds = currentUserAndFolloweesIds.concat(repostedFromArray);
+    var combinedIds = currentUserAndFolloweesIds.concat(repostedFromIds);
 
     var uniqueCombinedIds = combinedIds.reduce(function(a, b) {
       if (a.indexOf(b) < 0) {
@@ -69,15 +130,13 @@ function handleQueryDashboardsPostsRequest(req, res) {
       }
       return a;
     }, []);
-    
-    var users = findUsersByIds(req, res, uniqueCombinedIds);
 
-    res.send({
-      'posts': posts,
-      'users': users
-    });
+    logger.info('uniqueCombinedIds: ' + uniqueCombinedIds);
+    
+    findUsersByIds(req, res, uniqueCombinedIds, posts, sendPostsAndUsersResponse);
+
   });    
-}
+ }
 
 function handleQueryProfilePostsRequest(req, res) {
   logger.info('The server received a GET request for all posts owned by the ' +
@@ -99,6 +158,8 @@ function handleQueryProfilePostsRequest(req, res) {
     }
 
     var userIds = [req.query.ownedBy];
+
+    logger.info('posts: ' + posts);
     (posts || []).forEach(function(post) {
       if (post.postedFrom) {
         userIds.push(post.postedFrom);
@@ -111,14 +172,10 @@ function handleQueryProfilePostsRequest(req, res) {
       return a;
     }, []);
 
-    var users = findUsersByIds(req, res, uniqueUserIds);
+    logger.info('uniqueUserIds: ' + uniqueUserIds);
 
-    logger.info('The server successfully retrieved and sent all posts owned ' +
-                'by the profiled user.');
-    return res.send({
-      'posts': posts,
-      'users': users
-    });
+    findUsersByIds(req, res, uniqueUserIds, posts, sendPostsAndUsersResponse);
+
   });
 }
 
@@ -174,13 +231,7 @@ router.post('/', ensureAuthenticated, function(req, res) {
         userIds.push(post.repostedFrom);
       }
 
-      var users = findUsersByIds(req, res, userIds);
-
-      logger.info('The server successfully added the post.');
-      return res.status(200).send({
-        'post': post,
-        'users': users
-      });
+      findUsersByIds(req, res, userIds, [post], sendPostAndUsersResponse);
     });
   } else {
     logger.error('The user is not authorized to post.');
