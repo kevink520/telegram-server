@@ -5,6 +5,14 @@ var ensureAuthenticated = require('../../authentication/ensure-authenticated');
 var router = express.Router();
 var Post = mongoose.model('Post');
 
+function filterUsersForEmber(users) {
+  var filteredUsers = (users || []).map(function(user) {
+    user.password = '';
+    return user;
+  });
+  return filteredUsers;
+}
+
 function findUsersByIds(req, res, ids) {
   var User = mongoose.model('User');
   User.find({
@@ -17,7 +25,7 @@ function findUsersByIds(req, res, ids) {
       res.status(500).end();
     } else {
       logger.info('The server successfully retrieved the users.');
-      return users;
+      return filterUsersForEmber(users);
     }
   });
 }
@@ -46,12 +54,27 @@ function handleQueryDashboardsPostsRequest(req, res) {
     }
     logger.info('The server successfully retrieved all posts owned by the ' +
                 'current user and the followees.');
+    var repostedFromArray = [];
+    (posts || []).forEach(function(post) {
+      if (post.repostedFrom) {
+        repostedFromArray.push(post.repostedFrom);
+      }
+    });
+
+    var combinedIds = currentUserAndFolloweesIds.concat(repostedFromArray);
+
+    var uniqueCombinedIds = combinedIds.reduce(function(a, b) {
+      if (a.indexOf(b) < 0) {
+        a.push(b);
+      }
+      return a;
+    }, []);
     
-    var users = findUsersByIds(req, res, currentUserAndFolloweesIds);
+    var users = findUsersByIds(req, res, uniqueCombinedIds);
 
     res.send({
-      posts: posts,
-      users: users
+      'posts': posts,
+      'users': users
     });
   });    
 }
@@ -71,13 +94,30 @@ function handleQueryProfilePostsRequest(req, res) {
     if (!posts) {
       logger.info('The server found no posts owned by the profiled user.');
       return res.send({
-        posts: []
+        'posts': []
       });
     }
+
+    var userIds = [req.query.ownedBy];
+    (posts || []).forEach(function(post) {
+      if (post.postedFrom) {
+        userIds.push(post.postedFrom);
+      }
+    });
+    var uniqueUserIds = userIds.reduce(function(a, b) {
+      if (a.indexOf(b) < 0) {
+        a.push(b);
+      }
+      return a;
+    }, []);
+
+    var users = findUsersByIds(req, res, uniqueUserIds);
+
     logger.info('The server successfully retrieved and sent all posts owned ' +
                 'by the profiled user.');
     return res.send({
-      posts: posts
+      'posts': posts,
+      'users': users
     });
   });
 }
@@ -128,8 +168,19 @@ router.post('/', ensureAuthenticated, function(req, res) {
                      'database. ' + err);
         return res.status(500).end();
       }
+
+      var userIds = [post.author];
+      if (post.repostedFrom) {
+        userIds.push(post.repostedFrom);
+      }
+
+      var users = findUsersByIds(req, res, userIds);
+
       logger.info('The server successfully added the post.');
-      return res.status(200).send({'post': post});
+      return res.status(200).send({
+        'post': post,
+        'users': users
+      });
     });
   } else {
     logger.error('The user is not authorized to post.');
