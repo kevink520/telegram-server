@@ -22,7 +22,7 @@ function findUsersByIds(req, res, ids) {
   });
 }
 
-function findPostsOfCurrentUserAndFollowees(req, res) {
+function handleQueryDashboardsPostsRequest(req, res) {
   if (!req.user) {
     logger.error('The server found no logged-in user.');
     return res.status(404).end();
@@ -35,17 +35,17 @@ function findPostsOfCurrentUserAndFollowees(req, res) {
     }
   }, function(err, posts) {
     if (err) {
-      logger.error('An error occurred while finding all posts owned by the ' 
-        + 'current user and the followees. ' + err);
+      logger.error('An error occurred while finding all posts owned by the ' + 
+                   'current user and the followees. ' + err);
       return res.status(500).end();
     }
     if (!posts) {
-      logger.error('The server found no posts owned by the current user and ' 
-        + 'the followees.');
+      logger.error('The server found no posts owned by the current user and ' +
+                   'the followees.');
       return res.status(404).end();
     }
-    logger.info('The server successfully retrieved all posts owned by the ' 
-      + 'current user and the followees.');
+    logger.info('The server successfully retrieved all posts owned by the ' +
+                'current user and the followees.');
     
     var users = findUsersByIds(req, res, currentUserAndFolloweesIds);
 
@@ -56,16 +56,16 @@ function findPostsOfCurrentUserAndFollowees(req, res) {
   });    
 }
 
-function findPostsOfProfiledUser(req, res) {
-  logger.info('The server received a GET request for all posts owned by the ' 
-    + 'profiled user.');
+function handleQueryProfilePostsRequest(req, res) {
+  logger.info('The server received a GET request for all posts owned by the ' +
+              'profiled user.');
   logger.info('Retrieving posts for ' + req.query.ownedBy);
   Post.find({
     author: req.query.ownedBy
   }, function(err, posts) {
     if (err) {
-      logger.error('An error occurred while finding all posts owned by the ' 
-        + 'profiled user.');
+      logger.error('An error occurred while finding all posts owned by the ' +
+                   'profiled user.');
       return res.status(500).end();
     }
     if (!posts) {
@@ -74,8 +74,8 @@ function findPostsOfProfiledUser(req, res) {
         posts: []
       });
     }
-    logger.info('The server successfully retrieved and sent all posts owned by ' 
-      + 'the profiled user.');
+    logger.info('The server successfully retrieved and sent all posts owned ' +
+                'by the profiled user.');
     return res.send({
       posts: posts
     });
@@ -101,12 +101,12 @@ function findPostsOfProfiledUser(req, res) {
 
 router.get('/', function(req, res) {
   if (req.query.ownedBy) {
-    findPostsOfProfiledUser(req, res);
+    handleQueryProfilePostsRequest(req, res);
   } else if (req.user && req.query.ownedByCurrentUserAndFollowees) {
-    findPostsOfCurrentUserAndFollowees(req, res);
+    handleQueryDashboardsPostsRequest(req, res);
   } else {
-    logger.error('The server received a GET request without proper query values.' 
-      + ' The server returned a 404 status code.');
+    logger.error('The server received a GET request without proper query ' + 
+                 'values. The server returned a 404 status code.');
     res.status(404).end();
   }
 });
@@ -114,8 +114,8 @@ router.get('/', function(req, res) {
 router.post('/', ensureAuthenticated, function(req, res) {
   if (req.user._id == req.body.post.author 
     || req.user._id == req.body.post.repostedBy) {
-    logger.info('The server received a POST request from authenticated author ' 
-      + 'or reposter to add a post.');
+    logger.info('The server received a POST request from authenticated ' +
+                'author or reposter to add a post.');
     var post = new Post({ 
       author: req.body.post.author,
       repostedFrom: req.body.post.repostedFrom,
@@ -124,8 +124,8 @@ router.post('/', ensureAuthenticated, function(req, res) {
     });
     post.save(function(err, post) {
       if (err) {
-        logger.error('An error occurred while saving the post to the database. ' 
-          + err);
+        logger.error('An error occurred while saving the post to the ' +
+                     'database. ' + err);
         return res.status(500).end();
       }
       logger.info('The server successfully added the post.');
@@ -138,18 +138,18 @@ router.post('/', ensureAuthenticated, function(req, res) {
 });
 
 router.delete('/:_id', function(req, res) {
-  logger.info('The server received a DELETE request for a post with the ' 
-    + 'following post ID: ' + req.params._id);
+  logger.info('The server received a DELETE request for a post with the ' + 
+              'following post ID: ' + req.params._id);
   Post.findOneAndRemove({
     _id: req.params._id
   }, function(err, post) {
     if (err) {
-      logger.error('An error occurred while removing the post with the post ID: ' 
-        + req.params._id + ' from the database. ' + err);
+      logger.error('An error occurred while removing the post with the ' + 
+                   'post ID: ' + req.params._id + ' from the database. ' + err);
       return res.status(500).end();
     }
-    logger.info('The server successfully deleted the post with the post ID ' 
-      + req.params._id + '.');
+    logger.info('The server successfully deleted the post with the post ID ' + 
+                req.params._id + '.');
     return res.status(200).send({});
   });
 });

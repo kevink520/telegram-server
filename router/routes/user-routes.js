@@ -20,7 +20,7 @@ function isFollowedByCurrentUser(user, currentUser) {
   }
 }
 
-function returnUserToClient(user, currentUser) {
+function emberUser(user, currentUser) {
   var modifiedUser = {
     '_id': user._id,
     'username': user.username,
@@ -31,6 +31,25 @@ function returnUserToClient(user, currentUser) {
     'followedByCurrentUser': isFollowedByCurrentUser(user, currentUser)
   };
   return modifiedUser;
+}
+
+function encryptPassword(req, res, afterEncryption) {
+  bcrypt.genSalt(10, function(err, salt) {
+    if (err) {
+      logger.error('An error occurred while generating a salt using bcrypt. ' + 
+                   err);
+      return res.status(500).end();
+    }
+    bcrypt.hash(req.body.user.password, salt, function(err, hash) {
+      if (err) {
+        logger.error('An error occurred while hashing the password using ' + 
+                     'bcrypt. ' + err);
+        return res.status(500).end();
+      }
+      afterEncryption(req, res, hash);
+    });
+    
+  });
 }
 
 function createAndSaveUser(req, res, hash) {
@@ -45,191 +64,180 @@ function createAndSaveUser(req, res, hash) {
   });
   user.save(function(err, user) {
     if (err) {
-      logger.error('An error occurred while saving the user to the database. ' 
-        + err);
+      logger.error('An error occurred while saving the user to the database. ' +
+                   err);
       return res.status(500).end();
     } else {
-      logger.info('The server successfully added the user with the username ' 
-        + user.username + '.');
-      req.login(user, function(err) {
-        if (err) {
-          logger.error('An error occurred while establishing a session. '
-            + err);
-          return res.status(500).end();
-        }
-        logger.info('The server established a session.');
-        res.status(200).send({
-          'user': returnUserToClient(user, req.user)
-        });
-      });
+      logger.info('The server successfully added the user with the username ' +
+                  user.username + '.');
+      establishSession(req, res, user);
     }
+  });
+}
+
+function establishSession(req, res, user) {
+  req.login(user, function(err) {
+    if (err) {
+      logger.error('An error occurred while establishing a session. ' + err);
+      return res.status(500).end();
+    }
+    logger.info('The server established a session.');
+    res.status(200).send({
+      'user': emberUser(user, req.user)
+    });
   });
 }
 
 router.post('/', function(req, res) {
-  logger.info('The server received a POST request to add a user with the ' 
-    + 'following username: ' + req.body.user.username);
-  bcrypt.genSalt(10, function(err, salt) {
-    if (err) {
-      logger.error('An error occurred while generating a salt using bcrypt. ' 
-        + err);
-      return res.status(500).end();
-    }
-    bcrypt.hash(req.body.user.password, salt, function(err, hash) {
-      if (err) {
-        logger.error('An error occurred while hashing the password using ' 
-          + 'bcrypt. ' + err);
-        return res.status(500).end();
-      }
-      createAndSaveUser(req, res, hash);
-    });
-  });
+  logger.info('The server received a POST request to add a user with the ' + 
+              'following username: ' + req.body.user.username);
+  encryptPassword(req, res, createAndSaveUser);        
 });
 
-function addProfiledUserAsFollowee(loggedInUserId, profiledUserId, callback) {
-  User.findByIdAndUpdate(loggedInUserId, {
+function addUserAsFollowee(followerId, followeeId, callback) {
+  User.findByIdAndUpdate(followerId, {
     $addToSet: {
-      follows: profiledUserId
+      follows: followeeId
     }
   }, function(err, numAffected) {
     if (err) {
-      logger.error('An error occurred while updating the current user\'s ' 
-        + 'follows field. ' + err);
+      logger.error('An error occurred while updating the user\'s ' + 
+                   'follows field. ' + err);
       return callback(err);
     }
     if (numAffected) {
-      logger.info('The server successfully added the profiled user\'s _id to ' 
-        + 'the current user\'s follows field.');
+      logger.info('The server successfully added the user\'s _id to ' +
+                  'the other user\'s follows field.');
     } else {
-      logger.error('No current user\'s record was updated in the database.');
-      callback(null);
+      logger.error('No user\'s follows field was updated in the database.');
     }
+    callback(null);
   });
 }
 
-function addCurrentUserAsFollower(loggedInUserId, profiledUserId, callback) {
-  User.findByIdAndUpdate(profiledUserId, {
+function addUserAsFollower(followerId, followeeId, callback) {
+  User.findByIdAndUpdate(followeeId, {
     $addToSet: {
-      followedBy: loggedInUserId
+      followedBy: followerId
     }
   }, function(err, numAffected) {
     if (err) {
-      logger.error('An error occurred while updating the profiled user\'s ' 
-        + 'followedBy field. ' + err);
+      logger.error('An error occurred while updating the user\'s ' +
+                   'followedBy field. ' + err);
       callback(err);
     }
     if (numAffected) {
-      logger.info('The server successfully added the current user\'s _id to ' 
-        + 'the profiled user\'s followedBy field.');
+      logger.info('The server successfully added the user\'s _id to ' +
+                  'the other user\'s followedBy field.');
     } else {
-      logger.error('No profiled user\'s record was updated in the database.');
-      callback(null);
+      logger.error('No user\'s followedBy field was updated in the database.');
     }
+    callback(null);
   });
 }
 
-function returnUpdatedUser(req, res) {
+function sendUserResponse(req, res) {
   User.findById(req.params._id, function(err, user) {
     if (err) {
-      logger.error('An error occurred while retrieving the updated profiled ' 
-        + 'user with an _id from the database. ' + err);
+      logger.error('An error occurred while retrieving the updated profiled ' +
+                   'user with an _id from the database. ' + err);
     }
     if (!user) {
-      logger.error('No updated profiled user was found for the _id ' 
-        + req.params._id);
+      logger.error('No updated profiled user was found for the _id ' +
+                   req.params._id);
     }
-    logger.info('The server successfully retrieved and sent the updated ' 
-      + 'profiled user with _id ' + user._id + '.');
+    logger.info('The server successfully retrieved and sent the updated ' +
+                'profiled user with _id ' + user._id + '.');
     return res.send({ 
-      'user': returnUserToClient(user, req.user) 
+      'user': emberUser(user, req.user) 
     });
   });
 }
 
-function removeProfiledUserFromFollowees(loggedInUserId, profiledUserId, 
-  callback) {
-  User.findByIdAndUpdate(loggedInUserId, {
+function removeUserFromFollowees(followerId, followeeId, callback) {
+  User.findByIdAndUpdate(followerId, {
     $pull: {
-      follows: profiledUserId
+      follows: followeeId
     }
   }, {
     multi: true
   }, function(err, numAffected) {
     if (err) {
-      logger.error('An error occurred while removing the profiled user\'s _id ' 
-        + 'from the current user\'s follows field. ' + err);
+      logger.error('An error occurred while removing the user\'s _id ' + 
+                   'from the other user\'s follows field. ' + err);
       callback(err);
     }
     if (numAffected) {
-      logger.info('The server successfully removed the profiled user\'s _id ' 
-        + 'from the current user\'s follows field.');
+      logger.info('The server successfully removed the user\'s _id ' +
+                  'from the other user\'s follows field.');
     } else {
-      logger.error('No current user\'s record was updated in the database.');
+      logger.error('No user\'s record was updated in the database.');
     }
     callback(null);
   });
 }
 
-function removeCurrentUserFromFollowers(loggedInUserId, profiledUserId, 
-  callback) {
-  User.findByIdAndUpdate(profiledUserId, {
+function removeUserFromFollowers(followerId, followeeId, callback) {
+  User.findByIdAndUpdate(followeeId, {
     $pull: {
-      followedBy: loggedInUserId
+      followedBy: followerId
     }
   }, {
     multi: true
   }, function(err, numAffected) {
     if (err) {
-      logger.error('An error occurred while updating the profiled user\'s ' 
-        + 'followedBy field. ' + err);
+      logger.error('An error occurred while updating the user\'s ' +
+                   'followedBy field. ' + err);
       callback(err);
     }
     if (numAffected) {
-      logger.info('The server successfully removed the current user from the ' 
-        + 'profiled user\'s followedBy field.');
+      logger.info('The server successfully removed the user from the ' +
+                  'other user\'s followedBy field.');
     } else {
-      logger.error('No profiled user\'s record was updated in the database.');
+      logger.error('No user\'s record was updated in the database.');
     }
     callback(null);
   });
 }
 
-function addUserToFollow(req, res) {
+function createFollowRelationship(req, res) {
   var loggedInUser = req.user;
   var loggedInUserId = req.user._id;
   var profiledUserId = req.params._id;
   async.parallel([
     function(callback) {
-      addProfiledUserAsFollowee(loggedInUserId, profiledUserId, callback);
+      addUserAsFollowee(loggedInUserId, profiledUserId, callback);
     },
     function(callback) {
-      addCurrentUserAsFollower(loggedInUserId, profiledUserId, callback);
+      addUserAsFollower(loggedInUserId, profiledUserId, callback);
     }
   ], function(err) {
     if (err) {
-      logger.error('An error occurred while adding follower/followee ' 
-        + 'information to the database.');
+      logger.error('An error occurred while adding follower/followee ' +
+                   'information to the database.');
       return res.status(500).end();
     }
-    returnUpdatedUser(req, res);
+    sendUserResponse(req, res);
   });  
 }
 
-function removeUserToUnfollow(req, res) {
+function removeFollowRelationship(req, res) {
   var loggedInUser = req.user;
   var loggedInUserId = req.user._id;
   var profiledUserId = req.params._id;
   async.parallel([
     function(callback) {
-      removeProfiledUserFromFollowees(loggedInUserId, profiledUserId, User, 
-        callback);
+      removeUserFromFollowees(loggedInUserId, profiledUserId, User, callback);
     },
     function(callback) {
-      removeCurrentUserFromFollowers(loggedInUserId, profiledUserId, User, 
-        callback);
+      removeUserFromFollowers(loggedInUserId, profiledUserId, User, callback);
     }
   ], function(err) {
-    returnUpdatedUser(req, res);
+    if (err) {
+      logger.error('An error occurred while removing user to unfollow. ' + err);
+      res.status(500).end();
+    }
+    sendUserResponse(req, res);
   });
 }
 
@@ -242,9 +250,9 @@ router.put('/:_id', function(req, res) {
     return res.status(500).end();
   }
   if (req.body.user.followedByCurrentUser) {
-    addUserToFollow(req, res);
+    createFollowRelationship(req, res);
   } else if (req.body.user.followedByCurrentUser === false) {
-    removeUserToUnfollow(req, res);
+    removeFollowRelationship(req, res);
   } else {
     logger.error('No followedByCurrentUser value was provided.');
     res.status(500).end();
@@ -253,9 +261,9 @@ router.put('/:_id', function(req, res) {
 
 function handleAuthenticatedUserRequest(req, res) {
   logger.info('The server received a GET request for an authenticated user');
-  if (req.isAuthenticated && req.user) {
+  if (req.isAuthenticated() && req.user) {
     return res.send({
-      'users': [returnUserToClient(req.user)]
+      'users': [emberUser(req.user)]
     });
     logger.info('The authenticated user was found and returned to the client');
   } else {
@@ -267,7 +275,7 @@ function handleAuthenticatedUserRequest(req, res) {
   }
 }
 
-function handleQueryByUsenameAndPassword(req, res, next) {
+function handleLoginRequest(req, res, next) {
   logger.info('The server received a GET request for a user with the username ' 
     + req.query.username + ' and a password.');
   passport.authenticate('local', function(err, user, info) {
@@ -288,7 +296,7 @@ function handleQueryByUsenameAndPassword(req, res, next) {
       logger.info('Login with username ' + user.username + ' and the password ' 
         + 'was successful.');
       return res.send({
-        'users': [returnUserToClient(user, req.user)]
+        'users': [emberUser(user, req.user)]
       }); 
     });
   })(req, res, next);
@@ -310,11 +318,50 @@ function handleQueryByUsernameRequest(req, res) {
       logger.info('The server successfully retrieved and sent the user with ' 
         + 'the req.query.username ' + req.query.username);
       return res.send({ 
-        'users': [returnUserToClient(user, req.user)] 
+        'users': [emberUser(user, req.user)] 
       });
     } else {
       logger.info('No user was found for the username ' + req.query.username);
       return res.status(404).end();
+    }
+  });
+}
+
+function createAndEncryptPassword(user, res, next) {
+  var newPassword = Math.random().toString(36).slice(-8);
+  var salt = user.username + 'telegramApp2014';
+  var md5Password = md5(salt + newPassword);
+  bcrypt.genSalt(10, function(err, salt) {
+    if (err) {
+      logger.error('An error occurred while generating a salt using bcrypt. ' 
+        + err);
+      return res.status(500).end();
+    }
+    bcrypt.hash(md5Password, salt, function(err, hash) {
+      if (err) {
+        logger.error('An error occurred while hashing the password using ' 
+          + 'bcrypt. ' + err);
+        return res.status(500).end();
+      }
+      next(user, hash, newPassword, res);
+    });
+  });
+}
+
+function findUserAndUpdatePassword(user, hash, newPassword, res) {
+  User.findByIdAndUpdate(user._id, {
+    $set: {
+      password: hash
+    }
+  }, function(err, numAffected) {
+    if (err) {
+      logger.error('An error occurred while resetting the user\'s ' 
+        + 'password in the database. ' + err);
+      return res.status(500).end();
+    }
+    if (numAffected) {
+      logger.info('Successfully reset password.');
+      sendEmail(newPassword, user, res);           
     }
   });
 }
@@ -332,38 +379,7 @@ function handleQueryByEmailRequest(req, res) {
     if (user) {
       logger.info('The server successfully retrieved the user with the email ' 
         + req.query.email);
-      var newPassword = Math.random().toString(36).slice(-8);
-      var salt = user.username + 'telegramApp2014';
-      var md5Password = md5(salt + newPassword);
-      bcrypt.genSalt(10, function(err, salt) {
-        if (err) {
-          logger.error('An error occurred while generating a salt using bcrypt. ' 
-            + err);
-          return res.status(500).end();
-        }
-        bcrypt.hash(md5Password, salt, function(err, hash) {
-          if (err) {
-            logger.error('An error occurred while hashing the password using ' 
-              + 'bcrypt. ' + err);
-            return res.status(500).end();
-          }
-          User.findByIdAndUpdate(user._id, {
-            $set: {
-              password: hash
-            }
-          }, null, function(err, numAffected) {
-            if (err) {
-              logger.error('An error occurred while resetting the user\'s ' 
-                + 'password in the database. ' + err);
-              return res.status(500).end();
-            }
-            if (numAffected) {
-              logger.info('Successfully reset password.');
-              sendEmail(newPassword, user, res);           
-            }
-          });
-        });
-      });
+      createAndEncryptPassword(user, res, findUserAndUpdatePassword);
     } else {
       logger.info('No user was found for the email ' + req.query.email);
       return res.status(404).end();
@@ -371,7 +387,16 @@ function handleQueryByEmailRequest(req, res) {
   });
 }
 
-function handleRequestForFollowees(req, res) {
+function emberUsers(users, currentUser) {
+  if (!users) {
+    return [];
+  }
+  return users.map(function(user) {
+    return emberUser(user, currentUser);
+  });
+}
+
+function handleQueryForFolloweesRequest(req, res) {
   logger.info('The server received a GET request for all followees of the ' 
     + 'profiled user.');
   User.findById(req.query.followedBy, 'follows', function(err, user) {
@@ -413,13 +438,13 @@ function handleRequestForFollowees(req, res) {
       logger.info('The server successfully retrieved and sent all followees of ' 
         + 'the profiled user.');
       return res.send({
-        users: users
+        users: emberUsers(users, req.user)
       });
     });
   });
 }
 
-function handleRequestForFollowers(req, res) {
+function handleQueryForFollowersRequest(req, res) {
   logger.info('The server received a GET request for all followers of the ' 
     + 'profiled user.');
   User.findById(req.query.follows, 'followedBy', function(err, user) {
@@ -459,7 +484,7 @@ function handleRequestForFollowers(req, res) {
       logger.info('The server successfully retrieved and sent all followers of ' 
         + 'the profiled user.');
       res.send({
-        users: users
+        users: emberUsers(users, req.user)
       });
     });
   });
@@ -474,7 +499,7 @@ function handleRequestForFollowers(req, res) {
     }
     var usersArray = [];
     (users || []).forEach(function(user) {
-      usersArray.push(returnUserToClient(user, req.user));
+      usersArray.push(emberUser(user, req.user));
     });
     logger.info('The server successfully retrieved and sent all users.');
     return res.send({ 
@@ -487,15 +512,15 @@ router.get('/', function(req, res, next) {
   if (req.query.isAuthenticated) {
     handleAuthenticatedUserRequest(req, res);
   } else if (req.query.username && req.query.password) {
-    handleQueryByUsenameAndPassword(req, res, next);
+    handleLoginRequest(req, res, next);
   } else if (req.query.username) {
     handleQueryByUsernameRequest(req, res);
   } else if (req.query.email) {
     handleQueryByEmailRequest(req, res);
   } else if (req.query.followedBy) {
-    handleRequestForFollowees(req, res);
+    handleQueryForFolloweesRequest(req, res);
   } else if (req.query.follows) {
-    handleRequestForFollowers(req, res);
+    handleQueryForFollowersRequest(req, res);
   } else {
     logger.error('The server received no query and returned a 404 status code.');
     res.status(404).end();
@@ -518,7 +543,7 @@ router.get('/:_id', function(req, res) {
     logger.info('The server successfully retrieved and sent the user with _id ' 
       + user._id + '.');
     return res.send({ 
-      'user': returnUserToClient(user, req.user) 
+      'user': emberUser(user, req.user) 
     });
   });
 });
