@@ -490,24 +490,6 @@ function handleQueryForFollowersRequest(req, res) {
   });
 }
 
-/*function handleRequestForAllUsers(req, res) {
-  logger.info('The server received a GET request for all users.');
-  User.find(function findCallback(err, users) {
-    if (err) {
-      logger.error('An error occurred while retrieving all users from the database. ' + err);
-      return res.status(500).end();
-    }
-    var usersArray = [];
-    (users || []).forEach(function(user) {
-      usersArray.push(emberUser(user, req.user));
-    });
-    logger.info('The server successfully retrieved and sent all users.');
-    return res.send({ 
-      'users': usersArray 
-    });
-  });
-}*/
-
 router.get('/', function(req, res, next) {
   if (req.query.isAuthenticated) {
     handleAuthenticatedUserRequest(req, res);

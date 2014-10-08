@@ -33,16 +33,13 @@ function filterUsersForEmber(users, currentUser) {
   var filteredUsers = (users || []).map(function(user) {
     return emberUser(user, currentUser);
   });
-  filteredUsers.forEach(function(user, index) {
-    logger.info('filteredUsers[' + index + '].username: ' + user.username);
-  });
   
   return filteredUsers;
 }
 
 function sendPostsAndUsersResponse(res, postsArray, usersArray) {
   logger.info('The server successfully retrieved and sent the posts and ' +
-                'the users. ' + postsArray[0] + usersArray[0].username);
+              'the users.');
   res.send({
     'posts': postsArray,
     'users': usersArray
@@ -51,7 +48,7 @@ function sendPostsAndUsersResponse(res, postsArray, usersArray) {
 
 function sendPostAndUsersResponse(res, postsArray, usersArray) {
   logger.info('The server successfully retrieved and sent the post and ' +
-                'the users. ' + postsArray[0] + usersArray[0].username);
+              'the users.');
   res.send({
     'post': postsArray[0],
     'users': usersArray
@@ -71,9 +68,7 @@ function findUsersByIds(req, res, ids, postsArray, next) {
       } else {
         logger.info('The server successfully retrieved the user.');
         usersArray = filterUsersForEmber([user], req.user);
-        usersArray.forEach(function(user) {
-          logger.info('user.username: ' + user.username + '\n');
-        });     
+        
         next(res, postsArray, usersArray);
       }
     });
@@ -112,10 +107,12 @@ function handleQueryDashboardsPostsRequest(req, res) {
                    'current user and the followees. ' + err);
       return res.status(500).end();
     }
-    if (!posts) {
+    if (!posts.length) {
       logger.error('The server found no posts owned by the current user and ' +
                    'the followees.');
-      return res.status(404).end();
+      return res.status(404).send({
+        'posts': []
+      });
     }
     logger.info('The server successfully retrieved all posts owned by the ' +
                 'current user and the followees.');
@@ -134,8 +131,6 @@ function handleQueryDashboardsPostsRequest(req, res) {
       }
       return a;
     }, []);
-
-    logger.info('uniqueCombinedIds: ' + uniqueCombinedIds);
     
     findUsersByIds(req, res, uniqueCombinedIds, posts, sendPostsAndUsersResponse);
 
@@ -156,23 +151,17 @@ function handleQueryProfilePostsRequest(req, res) {
     }
     if (!posts.length) {
       logger.info('The server found no posts owned by the profiled user.');
-      return res.send({
+      return res.status(404).send({
         'posts': []
       });
     }
 
     var userIds = [req.query.ownedBy];
 
-  //  logger.info('posts[1]: ' + posts[1]);
     (posts || []).forEach(function(post) {
       if (post.repostedFrom) {
-        logger.info('post.repostedFrom: ' + post.repostedFrom);
         userIds.push(post.repostedFrom);
       }
-    });
-
-    userIds.forEach(function(id, index) {
-      logger.info('userId[' + index + ']: ' + id);
     });
 
     var uniqueUserIds = userIds.reduce(function(a, b) {
@@ -180,34 +169,12 @@ function handleQueryProfilePostsRequest(req, res) {
         a.push(b);
       }
       return a;
-    }, []);
-
- //   uniqueUserIds.forEach(function(id, index) {
-   //   logger.info('uniqueUserId[' + index + ']: ' + id);
-   // });
-    
+    }, []);  
 
     findUsersByIds(req, res, uniqueUserIds, posts, sendPostsAndUsersResponse);
 
   });
 }
-
-/*function handleRequestForAllUsers(req, res) {
-  logger.info('The server received a GET request for all posts.');
-  var Post = mongoose.model('Post');
-  Post.find(function(err, posts) {
-    if (err) {
-      logger.error('An error occurred while retrieving all posts from the database. ' + err);
-      return res.status(500).end();
-    }
-    var postsArray = [];
-    (posts || []).forEach(function(post) {
-      postsArray.push(post);
-    });
-    logger.info('The server successfully retrieved and sent all posts.');
-    return res.send({ posts: postsArray });
-  });
-}*/
 
 router.get('/', function(req, res) {
   if (req.query.ownedBy) {
