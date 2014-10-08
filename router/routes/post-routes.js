@@ -110,7 +110,7 @@ function handleQueryDashboardsPostsRequest(req, res) {
     if (!posts.length) {
       logger.error('The server found no posts owned by the current user and ' +
                    'the followees.');
-      return res.status(404).send({
+      return res.send({
         'posts': []
       });
     }
@@ -151,7 +151,7 @@ function handleQueryProfilePostsRequest(req, res) {
     }
     if (!posts.length) {
       logger.info('The server found no posts owned by the profiled user.');
-      return res.status(404).send({
+      return res.send({
         'posts': []
       });
     }
