@@ -1,77 +1,53 @@
 var express = require('express');
 var logger = require('nlogger').logger(module);
-var mongoose = require('mongoose');
+var db = require('../../database/database');
 var async = require('async');
-var bcrypt = require('bcrypt');
 var md5 = require('MD5');
-var sendEmail = require('../../emails/send-email.js');
+var UserUtils = require('./user-utils');
+var sendEmail = require('../../emails/send-email');
 var passport = require('../../authentication/auth');
 var router = express.Router();
-var User = mongoose.model('User');
+var User = db.model('User');
 
-function isFollowedByCurrentUser(user, currentUser) {
-  if (!currentUser) {
-    return false;
+function createAndSaveUser(err, req, res, hash, user, newPassword) {
+  if (err) {
+    return res.status(500).end();
   }
-  if (user.followedBy.indexOf(currentUser._id) != -1) {
-    return true;
-  } else {
-    return false;
-  }
-}
 
-function emberUser(user, currentUser) {
-  var modifiedUser = {
-    '_id': user._id,
-    'username': user.username,
-    'name': user.name,
-    'password': '',
-    'email': user.email,
-    'photo': user.photo,
-    'followedByCurrentUser': isFollowedByCurrentUser(user, currentUser)
-  };
-  return modifiedUser;
-}
-
-function encryptPassword(req, res, afterEncryption) {
-  bcrypt.genSalt(10, function(err, salt) {
+  User.findOne({
+    username: req.body.user.username
+  }, function(err, userWithSameUsername) {
     if (err) {
-      logger.error('An error occurred while generating a salt using bcrypt. ' + 
+      logger.error('An error occurred while checking for a duplicate username. ' +
                    err);
       return res.status(500).end();
     }
-    bcrypt.hash(req.body.user.password, salt, function(err, hash) {
-      if (err) {
-        logger.error('An error occurred while hashing the password using ' + 
-                     'bcrypt. ' + err);
-        return res.status(500).end();
-      }
-      afterEncryption(req, res, hash);
+    if (userWithSameUsername) {
+      logger.error('The username already exists in the database. The server ' +
+                   'returned a 422 status code.');
+      return res.status(422).end();
+    }
+
+    var user = new User({
+      username: req.body.user.username,
+      name: req.body.user.name,
+      password: hash,
+      email: req.body.user.email,
+      photo: req.body.user.photo,
+      followedBy: [],
+      follows: []
     });
-    
-  });
-}
-
-function createAndSaveUser(req, res, hash) {
-  var user = new User({
-    username: req.body.user.username,
-    name: req.body.user.name,
-    password: hash,
-    email: req.body.user.email,
-    photo: req.body.user.photo,
-    followedBy: [],
-    follows: []
-  });
-  user.save(function(err, user) {
-    if (err) {
-      logger.error('An error occurred while saving the user to the database. ' +
-                   err);
-      return res.status(500).end();
-    } else {
-      logger.info('The server successfully added the user with the username ' +
-                  user.username + '.');
-      establishSession(req, res, user);
-    }
+    user.save(function(err, user) {
+      if (err) {
+        logger.error('An error occurred while saving the user to the database. ' +
+                     err);
+        return res.status(500).end();
+      } else {
+        logger.info('The server successfully added the user with the username ' +
+                    user.username + '.');
+        establishSession(req, res, user);
+      }
+    });
   });
 }
 
@@ -83,7 +59,7 @@ function establishSession(req, res, user) {
     }
     logger.info('The server established a session.');
     res.status(200).send({
-      'user': emberUser(user, req.user)
+      'user': UserUtils.emberUser(user, req.user)
     });
   });
 }
@@ -91,50 +67,9 @@ function establishSession(req, res, user) {
 router.post('/', function(req, res) {
   logger.info('The server received a POST request to add a user with the ' + 
               'following username: ' + req.body.user.username);
-  encryptPassword(req, res, createAndSaveUser);        
+  var password = req.body.user.password;
+  UserUtils.encryptPassword(req, res, password, null, null, createAndSaveUser);        
 });
-
-function addUserAsFollowee(followerId, followeeId, callback) {
-  User.findByIdAndUpdate(followerId, {
-    $addToSet: {
-      follows: followeeId
-    }
-  }, function(err, numAffected) {
-    if (err) {
-      logger.error('An error occurred while updating the user\'s ' + 
-                   'follows field. ' + err);
-      return callback(err);
-    }
-    if (numAffected) {
-      logger.info('The server successfully added the user\'s _id to ' +
-                  'the other user\'s follows field.');
-    } else {
-      logger.error('No user\'s follows field was updated in the database.');
-    }
-    callback(null);
-  });
-}
-
-function addUserAsFollower(followerId, followeeId, callback) {
-  User.findByIdAndUpdate(followeeId, {
-    $addToSet: {
-      followedBy: followerId
-    }
-  }, function(err, numAffected) {
-    if (err) {
-      logger.error('An error occurred while updating the user\'s ' +
-                   'followedBy field. ' + err);
-      callback(err);
-    }
-    if (numAffected) {
-      logger.info('The server successfully added the user\'s _id to ' +
-                  'the other user\'s followedBy field.');
-    } else {
-      logger.error('No user\'s followedBy field was updated in the database.');
-    }
-    callback(null);
-  });
-}
 
 function sendUserResponse(req, res) {
   User.findById(req.params._id, function(err, user) {
@@ -149,54 +84,8 @@ function sendUserResponse(req, res) {
     logger.info('The server successfully retrieved and sent the updated ' +
                 'profiled user with _id ' + user._id + '.');
     return res.send({ 
-      'user': emberUser(user, req.user) 
+      'user': UserUtils.emberUser(user, req.user) 
     });
-  });
-}
-
-function removeUserFromFollowees(followerId, followeeId, callback) {
-  User.findByIdAndUpdate(followerId, {
-    $pull: {
-      follows: followeeId
-    }
-  }, {
-    multi: true
-  }, function(err, numAffected) {
-    if (err) {
-      logger.error('An error occurred while removing the user\'s _id ' + 
-                   'from the other user\'s follows field. ' + err);
-      callback(err);
-    }
-    if (numAffected) {
-      logger.info('The server successfully removed the user\'s _id ' +
-                  'from the other user\'s follows field.');
-    } else {
-      logger.error('No user\'s record was updated in the database.');
-    }
-    callback(null);
-  });
-}
-
-function removeUserFromFollowers(followerId, followeeId, callback) {
-  User.findByIdAndUpdate(followeeId, {
-    $pull: {
-      followedBy: followerId
-    }
-  }, {
-    multi: true
-  }, function(err, numAffected) {
-    if (err) {
-      logger.error('An error occurred while updating the user\'s ' +
-                   'followedBy field. ' + err);
-      callback(err);
-    }
-    if (numAffected) {
-      logger.info('The server successfully removed the user from the ' +
-                  'other user\'s followedBy field.');
-    } else {
-      logger.error('No user\'s record was updated in the database.');
-    }
-    callback(null);
   });
 }
 
@@ -206,10 +95,10 @@ function createFollowRelationship(req, res) {
   var profiledUserId = req.params._id;
   async.parallel([
     function(callback) {
-      addUserAsFollowee(loggedInUserId, profiledUserId, callback);
+      UserUtils.addUserAsFollowee(loggedInUserId, profiledUserId, callback);
     },
     function(callback) {
-      addUserAsFollower(loggedInUserId, profiledUserId, callback);
+      UserUtils.addUserAsFollower(loggedInUserId, profiledUserId, callback);
     }
   ], function(err) {
     if (err) {
@@ -227,10 +116,12 @@ function removeFollowRelationship(req, res) {
   var profiledUserId = req.params._id;
   async.parallel([
     function(callback) {
-      removeUserFromFollowees(loggedInUserId, profiledUserId, User, callback);
+      UserUtils.removeUserFromFollowees(loggedInUserId, profiledUserId, User, 
+                                        callback);
     },
     function(callback) {
-      removeUserFromFollowers(loggedInUserId, profiledUserId, User, callback);
+      UserUtils.removeUserFromFollowers(loggedInUserId, profiledUserId, User, 
+                                        callback);
     }
   ], function(err) {
     if (err) {
@@ -259,11 +150,17 @@ router.put('/:_id', function(req, res) {
   }
 });
 
+router.get('/logout', function(req, res) {
+  req.logout();
+  res.status(200).send('Success');
+  logger.info('Successfully logged out user.');
+});
+
 function handleAuthenticatedUserRequest(req, res) {
   logger.info('The server received a GET request for an authenticated user');
   if (req.isAuthenticated() && req.user) {
     return res.send({
-      'users': [emberUser(req.user)]
+      'users': [UserUtils.emberUser(req.user)]
     });
     logger.info('The authenticated user was found and returned to the client');
   } else {
@@ -296,7 +193,7 @@ function handleLoginRequest(req, res, next) {
       logger.info('Login with username ' + user.username + ' and the password ' 
         + 'was successful.');
       return res.send({
-        'users': [emberUser(user, req.user)]
+        'users': [UserUtils.emberUser(user, req.user)]
       }); 
     });
   })(req, res, next);
@@ -318,7 +215,7 @@ function handleQueryByUsernameRequest(req, res) {
       logger.info('The server successfully retrieved and sent the user with ' 
         + 'the req.query.username ' + req.query.username);
       return res.send({ 
-        'users': [emberUser(user, req.user)] 
+        'users': [UserUtils.emberUser(user, req.user)] 
       });
     } else {
       logger.info('No user was found for the username ' + req.query.username);
@@ -327,28 +224,18 @@ function handleQueryByUsernameRequest(req, res) {
   });
 }
 
-function createAndEncryptPassword(user, res, next) {
+function createAndUpdatePassword(res, user) {
   var newPassword = Math.random().toString(36).slice(-8);
   var salt = user.username + 'telegramApp2014';
   var md5Password = md5(salt + newPassword);
-  bcrypt.genSalt(10, function(err, salt) {
-    if (err) {
-      logger.error('An error occurred while generating a salt using bcrypt. ' 
-        + err);
-      return res.status(500).end();
-    }
-    bcrypt.hash(md5Password, salt, function(err, hash) {
-      if (err) {
-        logger.error('An error occurred while hashing the password using ' 
-          + 'bcrypt. ' + err);
-        return res.status(500).end();
-      }
-      next(user, hash, newPassword, res);
-    });
-  });
+  UserUtils.encryptPassword(null, res, md5Password, user, newPassword,
+                            findUserAndUpdatePassword);
 }
 
-function findUserAndUpdatePassword(user, hash, newPassword, res) {
+function findUserAndUpdatePassword(err, req, res, hash, user, newPassword) {
+  if (err) {
+    res.status(500).end();
+  }
   User.findByIdAndUpdate(user._id, {
     $set: {
       password: hash
@@ -379,20 +266,11 @@ function handleQueryByEmailRequest(req, res) {
     if (user) {
       logger.info('The server successfully retrieved the user with the email ' 
         + req.query.email);
-      createAndEncryptPassword(user, res, findUserAndUpdatePassword);
+      createAndUpdatePassword(res, user);
     } else {
       logger.info('No user was found for the email ' + req.query.email);
       return res.status(404).end();
     }
-  });
-}
-
-function emberUsers(users, currentUser) {
-  if (!users) {
-    return [];
-  }
-  return users.map(function(user) {
-    return emberUser(user, currentUser);
   });
 }
 
@@ -438,7 +316,7 @@ function handleQueryForFolloweesRequest(req, res) {
       logger.info('The server successfully retrieved and sent all followees of ' 
         + 'the profiled user.');
       return res.send({
-        'users': emberUsers(users, req.user)
+        'users': UserUtils.emberUsers(users, req.user)
       });
     });
   });
@@ -484,7 +362,7 @@ function handleQueryForFollowersRequest(req, res) {
       logger.info('The server successfully retrieved and sent all followers of ' 
         + 'the profiled user.');
       res.send({
-        'users': emberUsers(users, req.user)
+        'users': UserUtils.emberUsers(users, req.user)
       });
     });
   });
@@ -525,9 +403,10 @@ router.get('/:_id', function(req, res) {
     logger.info('The server successfully retrieved and sent the user with _id ' 
       + user._id + '.');
     return res.send({ 
-      'user': emberUser(user, req.user) 
+      'user': UserUtils.emberUser(user, req.user) 
     });
   });
 });
+
 
 module.exports = router;

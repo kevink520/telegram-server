@@ -1,41 +1,10 @@
 var express = require('express');
 var logger = require('nlogger').logger(module);
-var mongoose = require('mongoose');
+var db = require('../../database/database');
 var ensureAuthenticated = require('../../authentication/ensure-authenticated');
+var UserUtils = require('./user-utils');
 var router = express.Router();
-var Post = mongoose.model('Post');
-
-function isFollowedByCurrentUser(user, currentUser) {
-  if (!currentUser) {
-    return false;
-  }
-  if (user.followedBy.indexOf(currentUser._id) != -1) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-function emberUser(user, currentUser) {
-  var modifiedUser = {
-    '_id': user._id,
-    'username': user.username,
-    'name': user.name,
-    'password': '',
-    'email': user.email,
-    'photo': user.photo,
-    'followedByCurrentUser': isFollowedByCurrentUser(user, currentUser)
-  };
-  return modifiedUser;
-}
-
-function filterUsersForEmber(users, currentUser) {
-  var filteredUsers = (users || []).map(function(user) {
-    return emberUser(user, currentUser);
-  });
-  
-  return filteredUsers;
-}
+var Post = db.model('Post');
 
 function sendPostsAndUsersResponse(res, postsArray, usersArray) {
   logger.info('The server successfully retrieved and sent the posts and ' +
@@ -57,21 +26,9 @@ function sendPostAndUsersResponse(res, postsArray, usersArray) {
 
 function findUsersByIds(req, res, ids, postsArray, next) {
   var usersArray;
-  var User = mongoose.model('User');
+  var User = db.model('User');
   if (!ids.length) {
     usersArray = [];
-  } else if (ids.length === 1) {
-    User.findById(ids[0], function(err, user) {
-      if (err) {
-        logger.error('An error occurred while finding the user. ' + err);
-        res.status(500).end();
-      } else {
-        logger.info('The server successfully retrieved the user.');
-        usersArray = filterUsersForEmber([user], req.user);
-        
-        next(res, postsArray, usersArray);
-      }
-    });
   } else {
     User.find({
       _id: {
@@ -83,7 +40,7 @@ function findUsersByIds(req, res, ids, postsArray, next) {
         res.status(500).end();
       } else {
         logger.info('The server successfully retrieved the users.');
-        usersArray = filterUsersForEmber(users, req.user);
+        usersArray = UserUtils.emberUsers(users, req.user);
         next(res, postsArray, usersArray);
       }
     });

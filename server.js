@@ -32,16 +32,6 @@ app.use(function(err, req, res, next) {
   res.status(err.status || 500).end();
 });
 
-//function generatePostId() {
-//  return (+(posts.posts.sort(function(a, b) {
-//    if (a.id < b.id) {
-//      return -1;
-//    } else {
-//      return 1;
-//    }
-//  })[posts.posts.length - 1].id) + 1).toString();
-//}
-
 db.on('error', console.error.bind(console, 'connection error:'));
 
 db.once('open', function() {
