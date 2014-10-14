@@ -1,6 +1,7 @@
 var fs = require('fs');
 var logger = require('nlogger').logger(module);
 var Handlebars = require('handlebars');
+var UserUtils = require('../router/routes/user-utils');
 var config = require('../config/config');
 var mailgun = require('mailgun-js')({ 
   apiKey: config.MAILGUN_API_KEY, 
@@ -27,7 +28,7 @@ function returnUserToClient(user, currentUser) {
     'password': '',
     'email': user.email,
     'photo': user.photo,
-    'followedByCurrentUser': isFollowedByCurrentUser(user, currentUser)
+    'followedByCurrentUser': UserUtils.isFollowedByUser(user, currentUser)
   };
   return modifiedUser;
 }
@@ -59,7 +60,7 @@ module.exports = function sendEmail(newPassword, user, res) {
       }
       logger.info('Successfully sent email. ' + body);
       return res.send({ 
-        'users': [returnUserToClient(user, null)] 
+        'users': [UserUtils.emberUser(user, null)] 
       });
     });
   });               

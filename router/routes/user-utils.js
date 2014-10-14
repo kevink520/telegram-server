@@ -37,8 +37,7 @@ UserUtils.emberUsers = function(users, currentUser) {
   return filteredUsersForEmber;
 }
 
-UserUtils.encryptPassword = function(req, res, password, user, newPassword,
-                                     afterEncryption) {
+UserUtils.encryptPassword = function(password, afterEncryption) {
   bcrypt.genSalt(10, function(err, salt) {
     if (err) {
       logger.error('An error occurred while generating a salt using bcrypt. ' + 
@@ -51,7 +50,7 @@ UserUtils.encryptPassword = function(req, res, password, user, newPassword,
                      'bcrypt. ' + err);
         return afterEncryption(err);
       }
-      afterEncryption(null, req, res, hash, user, newPassword);
+      afterEncryption(null, hash);
     });
     
   });

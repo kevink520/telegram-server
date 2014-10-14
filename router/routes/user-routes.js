@@ -9,7 +9,7 @@ var passport = require('../../authentication/auth');
 var router = express.Router();
 var User = db.model('User');
 
-function createAndSaveUser(err, req, res, hash, user, newPassword) {
+function createAndSaveUser(err, req, res, hash) {
   if (err) {
     return res.status(500).end();
   }
@@ -68,7 +68,12 @@ router.post('/', function(req, res) {
   logger.info('The server received a POST request to add a user with the ' + 
               'following username: ' + req.body.user.username);
   var password = req.body.user.password;
-  UserUtils.encryptPassword(req, res, password, null, null, createAndSaveUser);        
+  UserUtils.encryptPassword(password, function(err, hash) {
+    if (err) {
+      return res.status(500).end();
+    }
+    createAndSaveUser(err, req, res, hash);
+  });        
 });
 
 function sendUserResponse(req, res) {
@@ -228,11 +233,15 @@ function createAndUpdatePassword(res, user) {
   var newPassword = Math.random().toString(36).slice(-8);
   var salt = user.username + 'telegramApp2014';
   var md5Password = md5(salt + newPassword);
-  UserUtils.encryptPassword(null, res, md5Password, user, newPassword,
-                            findUserAndUpdatePassword);
+  UserUtils.encryptPassword(md5Password, function(err, hash) {
+    if (err) {
+      return res.status(500).end();
+    }
+    findUserAndUpdatePassword(err, res, hash, user, newPassword);
+  });
 }
 
-function findUserAndUpdatePassword(err, req, res, hash, user, newPassword) {
+function findUserAndUpdatePassword(err, res, hash, user, newPassword) {
   if (err) {
     res.status(500).end();
   }
@@ -242,8 +251,8 @@ function findUserAndUpdatePassword(err, req, res, hash, user, newPassword) {
     }
   }, function(err, numAffected) {
     if (err) {
-      logger.error('An error occurred while resetting the user\'s ' 
-        + 'password in the database. ' + err);
+      logger.error('An error occurred while resetting the user\'s ' + 
+                   'password in the database. ' + err);
       return res.status(500).end();
     }
     if (numAffected) {
