@@ -42,7 +42,7 @@ UserUtils.encryptPassword = function(password, afterEncryption) {
     if (err) {
       logger.error('An error occurred while generating a salt using bcrypt. ' + 
                    err);
-      return afterEncryption(err);
+      return afterEncryption(err, null);
     }
     bcrypt.hash(password, salt, function(err, hash) {
       if (err) {

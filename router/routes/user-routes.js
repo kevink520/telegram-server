@@ -9,13 +9,9 @@ var passport = require('../../authentication/auth');
 var router = express.Router();
 var User = db.model('User');
 
-function createAndSaveUser(err, req, res, hash) {
-  if (err) {
-    return res.status(500).end();
-  }
-
+function createAndSaveUser(userData, hash, done) {
   User.findOne({
-    username: req.body.user.username
+    username: userData.username
   }, function(err, userWithSameUsername) {
     if (err) {
       logger.error('An error occurred while checking for a duplicate username. ' +
@@ -29,11 +25,11 @@ function createAndSaveUser(err, req, res, hash) {
     }
 
     var user = new User({
-      username: req.body.user.username,
-      name: req.body.user.name,
+      username: userData.username,
+      name: userData.name,
       password: hash,
-      email: req.body.user.email,
-      photo: req.body.user.photo,
+      email: userData.email,
+      photo: userData.photo,
       followedBy: [],
       follows: []
     });
@@ -41,12 +37,11 @@ function createAndSaveUser(err, req, res, hash) {
       if (err) {
         logger.error('An error occurred while saving the user to the database. ' +
                      err);
-        return res.status(500).end();
-      } else {
-        logger.info('The server successfully added the user with the username ' +
-                    user.username + '.');
-        establishSession(req, res, user);
+        return done(err, null);
       }
+      logger.info('The server successfully added the user with the username ' +
+                  user.username + '.');
+      done(null, user);
     });
   });
 }
@@ -72,7 +67,12 @@ router.post('/', function(req, res) {
     if (err) {
       return res.status(500).end();
     }
-    createAndSaveUser(err, req, res, hash);
+    createAndSaveUser(req.body.user, hash, function(err, user) {
+      if (err) {
+        return res.status(500).end();
+      }
+      establishSession(req, res, user);
+    });
   });        
 });
 

@@ -8,31 +8,6 @@ var mailgun = require('mailgun-js')({
   domain: config.MAILGUN_DOMAIN
 });
 
-function isFollowedByCurrentUser(user, currentUser) {
-  if (!currentUser) {
-    return false;
-  }
-  if (user.followedBy.indexOf(currentUser._id) != -1) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-function returnUserToClient(user, currentUser) {
-
-  var modifiedUser = {
-    '_id': user._id,
-    'username': user.username,
-    'name': user.name,
-    'password': '',
-    'email': user.email,
-    'photo': user.photo,
-    'followedByCurrentUser': UserUtils.isFollowedByUser(user, currentUser)
-  };
-  return modifiedUser;
-}
-
 module.exports = function sendEmail(newPassword, user, res) {
   fs.readFile(__dirname + '/password-email-template.hbs', function(err, data) {
     if (err) {
